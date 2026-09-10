@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from spotify_api.api.routes import health, jobs, lookup
+from spotify_api.api.routes import health, jobs, lookup, player
 
 __all__ = ["api_router", "root_router"]
 
@@ -19,3 +19,4 @@ root_router.include_router(health.router)
 api_router = APIRouter(prefix="/v1")
 api_router.include_router(lookup.router)
 api_router.include_router(jobs.router)
+api_router.include_router(player.router)

@@ -65,12 +65,26 @@ def test_each_call_returns_an_independent_application() -> None:
 def test_the_openapi_schema_documents_every_route(app: FastAPI) -> None:
     schema = app.openapi()
 
-    assert set(schema["paths"]) == {
-        "/healthy",
-        "/ready",
-        "/v1/lookup",
-        "/v1/jobs",
-        "/v1/jobs/{job_id}",
+    paths = set(schema["paths"])
+    assert {"/healthy", "/ready", "/v1/lookup", "/v1/jobs", "/v1/jobs/{job_id}"} <= paths
+
+    # Every player endpoint is published, so a client can be generated from this.
+    player = {p for p in paths if p.startswith("/v1/player")}
+    assert player == {
+        "/v1/player",
+        "/v1/player/currently-playing",
+        "/v1/player/devices",
+        "/v1/player/next",
+        "/v1/player/pause",
+        "/v1/player/play",
+        "/v1/player/previous",
+        "/v1/player/queue",
+        "/v1/player/recently-played",
+        "/v1/player/repeat",
+        "/v1/player/seek",
+        "/v1/player/shuffle",
+        "/v1/player/transfer",
+        "/v1/player/volume",
     }
     assert schema["info"]["title"] == "Spotify Lookup API"
 

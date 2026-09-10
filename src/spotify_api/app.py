@@ -24,12 +24,14 @@ from spotify_api.api.router import api_router, root_router
 from spotify_api.config import Settings, get_settings
 from spotify_api.credentials.keyring import KeyringCredentialProvider
 from spotify_api.errors import install_exception_handlers
+from spotify_api.jobs.confirm import PlaybackConfirmer
 from spotify_api.jobs.runner import JobRunner
 from spotify_api.jobs.store import InMemoryJobStore
 from spotify_api.logging import configure_logging
 from spotify_api.middleware import RequestContextMiddleware
 from spotify_api.spotify.client import SpotifyClient
 from spotify_api.spotify.resolver import SpotifyTrackResolver
+from spotify_api.spotify.resources.player import PlayerResource
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -52,7 +54,7 @@ comes back as a `not_found` or `error` result rather than failing the batch.
 
 def _build_graph(
     settings: Settings, client: httpx.AsyncClient
-) -> tuple[SpotifyTrackResolver, KeyringCredentialProvider]:
+) -> tuple[SpotifyTrackResolver, KeyringCredentialProvider, SpotifyClient]:
     """Assemble the object graph over a shared HTTP client.
 
     One client serves both keyring and Spotify: they are different hosts, but
@@ -61,7 +63,8 @@ def _build_graph(
     """
     credentials = KeyringCredentialProvider(client=client, settings=settings)
     spotify_client = SpotifyClient(client=client, credentials=credentials, settings=settings)
-    return SpotifyTrackResolver(client=spotify_client, settings=settings), credentials
+    resolver = SpotifyTrackResolver(client=spotify_client, settings=settings)
+    return resolver, credentials, spotify_client
 
 
 def create_app(
@@ -92,9 +95,13 @@ def create_app(
             transport=transport,
         ) as client:
             app.state.http_client = client
-            resolver, credentials = _build_graph(resolved_settings, client)
+            resolver, credentials, spotify_client = _build_graph(resolved_settings, client)
             app.state.resolver = resolver
             app.state.credentials = credentials
+            app.state.player = PlayerResource(client=spotify_client)
+            app.state.confirmer = PlaybackConfirmer(
+                client=spotify_client, settings=resolved_settings
+            )
             app.state.job_store = InMemoryJobStore(ttl_seconds=resolved_settings.job_ttl_seconds)
             app.state.job_runner = JobRunner(store=app.state.job_store)
             _logger.info(
@@ -114,6 +121,7 @@ def create_app(
         lifespan=lifespan,
         openapi_tags=[
             {"name": "lookup", "description": "Batch track resolution."},
+            {"name": "player", "description": "Playback control and inspection."},
             {"name": "jobs", "description": "Background jobs started with ?async=true."},
             {"name": "health", "description": "Liveness and readiness probes."},
         ],

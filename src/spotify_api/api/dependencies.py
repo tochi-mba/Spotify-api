@@ -18,20 +18,26 @@ from spotify_api.errors import UserTokenRejectedError
 
 if TYPE_CHECKING:
     from spotify_api.config import Settings
+    from spotify_api.jobs.confirm import PlaybackConfirmer
     from spotify_api.jobs.protocols import JobStore
     from spotify_api.jobs.runner import JobRunner
     from spotify_api.spotify.protocols import TrackResolver
+    from spotify_api.spotify.resources.player import PlayerResource
 
 __all__ = [
     "PROFILE_HEADER",
     "USER_TOKEN_HEADER",
+    "ConfirmerDep",
     "JobRunnerDep",
     "JobStoreDep",
+    "PlayerDep",
     "ResolverDep",
     "SettingsDep",
     "UserContextDep",
+    "get_confirmer",
     "get_job_runner",
     "get_job_store",
+    "get_player",
     "get_resolver",
     "get_settings_dependency",
     "get_user_context",
@@ -48,6 +54,18 @@ def get_resolver(request: Request) -> TrackResolver:
     """Return the resolver assembled at startup."""
     resolver: TrackResolver = request.app.state.resolver
     return resolver
+
+
+def get_player(request: Request) -> PlayerResource:
+    """Return the player resource assembled at startup."""
+    player: PlayerResource = request.app.state.player
+    return player
+
+
+def get_confirmer(request: Request) -> PlaybackConfirmer:
+    """Return the playback confirmer assembled at startup."""
+    confirmer: PlaybackConfirmer = request.app.state.confirmer
+    return confirmer
 
 
 def get_job_runner(request: Request) -> JobRunner:
@@ -107,7 +125,9 @@ def get_user_context(
     return UserContext(user_token=SecretStr(token), profile=profile)
 
 
+ConfirmerDep = Annotated["PlaybackConfirmer", Depends(get_confirmer)]
 JobRunnerDep = Annotated["JobRunner", Depends(get_job_runner)]
+PlayerDep = Annotated["PlayerResource", Depends(get_player)]
 JobStoreDep = Annotated["JobStore", Depends(get_job_store)]
 ResolverDep = Annotated["TrackResolver", Depends(get_resolver)]
 SettingsDep = Annotated["Settings", Depends(get_settings_dependency)]

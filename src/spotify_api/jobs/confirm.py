@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 __all__ = [
     "PlaybackConfirmer",
     "Predicate",
+    "always_confirmed",
     "device_is",
     "is_paused",
     "is_playing",
@@ -58,6 +59,16 @@ def _current_uri(player: dict[str, Any]) -> str | None:
     """The URI of whatever is loaded, if anything is."""
     item = player.get("item")
     return item.get("uri") if isinstance(item, dict) else None
+
+
+def always_confirmed() -> Predicate:
+    """Nothing to observe -- the upstream's own success is the whole signal.
+
+    Used by commands that change something the player state does not report,
+    such as queueing: the queued item may well be consumed before we could look
+    for it, so polling would manufacture failures rather than detect them.
+    """
+    return lambda _player: True
 
 
 def playing_uri(uri: str) -> Predicate:

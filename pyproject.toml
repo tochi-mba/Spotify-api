@@ -147,6 +147,9 @@ ignore = [
 # Route handlers declare their dependencies as parameters; FastAPI's whole DI
 # model depends on it, and a boolean query flag is a boolean query flag.
 "src/spotify_api/api/routes/**" = ["TC001", "TC002", "PLR0913", "PLR0917", "FBT001", "FBT002"]
+# Spotify's own endpoints take many optional parameters; mirroring them one for
+# one is clearer than inventing an options object per call.
+"src/spotify_api/spotify/resources/**" = ["PLR0913", "PLR0917"]
 "tests/**" = [
     "S101",    # asserts are the point
     "S105", "S106", "S107",  # dummy credentials are dummy on purpose
