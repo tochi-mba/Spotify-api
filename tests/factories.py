@@ -16,10 +16,10 @@ from spotify_api.config import Settings
 __all__ = ["TEST_CLIENT_ID", "TEST_CLIENT_SECRET", "make_settings"]
 
 TEST_CLIENT_ID = "test-client-id"
-TEST_CLIENT_SECRET = "test-client-secret"  # noqa: S105
+TEST_CLIENT_SECRET = "test-client-secret"
 
 
-def make_settings(**overrides: Any) -> Settings:  # noqa: ANN401
+def make_settings(**overrides: Any) -> Settings:
     """Build a ``Settings`` instance with dummy credentials and no ``.env``."""
     values: dict[str, Any] = {
         "spotify_client_id": SecretStr(TEST_CLIENT_ID),

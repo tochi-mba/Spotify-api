@@ -28,7 +28,6 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
-    "respx>=0.21",
     "ruff>=0.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
@@ -144,11 +143,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",    # asserts are the point
+    "S105", "S106", "S107",  # dummy credentials are dummy on purpose
     "PLR2004", # magic values are fine in assertions
     "SLF001",  # tests may inspect private state
-    "D100", "D103", "D104",
+    "D100", "D102", "D103", "D104", "D107",  # test helpers document themselves
+    "EM101",   # inline messages keep a test's intent on one line
     "TRY301",  # tests raise inline to build realistic exc_info
     "FBT001",  # parametrised booleans are the clearest way to table a test
+    "ANN401",  # fixture factories are genuinely polymorphic
+    "ARG002",  # fakes must match the real signature they stand in for
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -180,6 +183,3 @@ no_implicit_reexport = true
 show_error_codes = true
 pretty = true
 
-[[tool.mypy.overrides]]
-module = ["respx.*"]
-ignore_missing_imports = true
