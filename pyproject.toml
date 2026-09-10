@@ -147,6 +147,7 @@ ignore = [
     "PLR2004", # magic values are fine in assertions
     "SLF001",  # tests may inspect private state
     "D100", "D103", "D104",
+    "TRY301",  # tests raise inline to build realistic exc_info
 ]
 
 [tool.ruff.lint.pydocstyle]
