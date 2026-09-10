@@ -44,6 +44,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Attach the request id, time the call, and emit one access log line."""
         request_id = self._resolve_request_id(request)
+        # Exception handlers for unhandled errors run *outside* this middleware,
+        # by which point the context var has been reset. Stashing the id on the
+        # request keeps it reachable from there.
+        request.state.request_id = request_id
         token = bind_request_id(request_id)
         started = time.perf_counter()
         try:

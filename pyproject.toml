@@ -141,6 +141,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# FastAPI resolves route signatures at runtime to build the OpenAPI schema and
+# the dependency graph, so these imports cannot move into TYPE_CHECKING blocks.
+"src/spotify_api/api/**" = ["TC001", "TC002"]
 "tests/**" = [
     "S101",    # asserts are the point
     "S105", "S106", "S107",  # dummy credentials are dummy on purpose
@@ -152,6 +155,7 @@ ignore = [
     "FBT001",  # parametrised booleans are the clearest way to table a test
     "ANN401",  # fixture factories are genuinely polymorphic
     "ARG002",  # fakes must match the real signature they stand in for
+    "TC002",   # pytest is used at runtime by fixtures and marks
 ]
 
 [tool.ruff.lint.pydocstyle]
