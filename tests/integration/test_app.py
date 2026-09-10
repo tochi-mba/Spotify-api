@@ -65,12 +65,28 @@ def test_each_call_returns_an_independent_application() -> None:
 def test_the_openapi_schema_documents_every_route(app: FastAPI) -> None:
     schema = app.openapi()
 
-    assert set(schema["paths"]) == {"/healthy", "/ready", "/v1/lookup"}
+    assert set(schema["paths"]) == {
+        "/healthy",
+        "/ready",
+        "/v1/lookup",
+        "/v1/jobs",
+        "/v1/jobs/{job_id}",
+    }
     assert schema["info"]["title"] == "Spotify Lookup API"
 
     lookup = schema["paths"]["/v1/lookup"]["post"]
-    assert set(lookup["responses"]) >= {"200", "422", "503"}
+    assert set(lookup["responses"]) >= {"200", "401", "422", "503"}
     assert lookup["description"]
+
+    # The async flag is documented on the route, not just in prose.
+    flags = [p for p in lookup["parameters"] if p["name"] == "async"]
+    assert flags
+    assert flags[0]["in"] == "query"
+
+    # And so is the credential header every route needs.
+    headers = [p for p in lookup["parameters"] if p["name"] == "X-Keyring-User-Token"]
+    assert headers
+    assert headers[0]["in"] == "header"
 
 
 def test_the_request_schema_is_published_with_its_example(app: FastAPI) -> None:

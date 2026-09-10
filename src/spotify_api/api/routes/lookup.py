@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 
-from spotify_api.api.dependencies import ResolverDep, SettingsDep, UserContextDep
+from spotify_api.api.asynchrony import AsyncFlag, run_or_submit
+from spotify_api.api.dependencies import (
+    JobRunnerDep,
+    ResolverDep,
+    SettingsDep,
+    UserContextDep,
+)
 from spotify_api.errors import BatchTooLargeError
 from spotify_api.logging import current_request_id
 from spotify_api.models.requests import LookupRequest
@@ -31,13 +38,24 @@ router = APIRouter(tags=["lookup"])
         "fails the request."
     ),
     responses={
+        status.HTTP_202_ACCEPTED: {
+            "description": "Accepted for background execution (`?async=true`).",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "The keyring user token is missing or was refused.",
+        },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "model": ErrorResponse,
             "description": "The request body is invalid.",
         },
+        status.HTTP_502_BAD_GATEWAY: {
+            "model": ErrorResponse,
+            "description": "keyring has no usable Spotify credential for this profile.",
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "model": ErrorResponse,
-            "description": "Spotify is unreachable or rejected us.",
+            "description": "Spotify or keyring is unreachable.",
         },
     },
 )
@@ -46,7 +64,9 @@ async def lookup(
     resolver: ResolverDep,
     settings: SettingsDep,
     context: UserContextDep,
-) -> LookupResponse:
+    runner: JobRunnerDep,
+    run_async: AsyncFlag = False,
+) -> LookupResponse | JSONResponse:
     """Resolve every submitted item and return one result per item.
 
     The schema caps batches at an absolute ceiling; this is the *operational*
@@ -61,5 +81,10 @@ async def lookup(
             message, limit=settings.max_batch_size, received=len(payload.items)
         )
 
-    results = await resolver.resolve(payload.items, market=payload.market, context=context)
-    return LookupResponse(request_id=current_request_id(), results=results)
+    request_id = current_request_id()
+
+    async def work() -> LookupResponse:
+        results = await resolver.resolve(payload.items, market=payload.market, context=context)
+        return LookupResponse(request_id=request_id, results=results)
+
+    return await run_or_submit(run_async=run_async, operation="lookup", work=work, runner=runner)

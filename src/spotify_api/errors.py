@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BatchTooLargeError",
+    "ConfirmationTimeoutError",
     "CredentialUnavailableError",
+    "JobNotFoundError",
     "KeyringUnavailableError",
     "NoActiveDeviceError",
     "PremiumRequiredError",
@@ -68,6 +70,33 @@ class BatchTooLargeError(ServiceError):
 
     error_type = "batch_too_large"
     status_code = 422
+
+
+class ConfirmationTimeoutError(ServiceError):
+    """Spotify accepted the command but its effect never became observable.
+
+    Carries the last player state seen, because "it did not work" is much less
+    useful than "it is still playing the previous track" or "the device
+    reports volume 30, not 80".
+    """
+
+    error_type = "confirmation_timeout"
+    status_code = 504
+
+    def __init__(self, message: str, observed: object = None) -> None:
+        """Record what the player looked like when we gave up."""
+        super().__init__(message, observed=observed)
+
+
+class JobNotFoundError(ServiceError):
+    """No job with that id, or it has aged out of the store.
+
+    Deliberately one error for both: telling a caller that a job *used* to
+    exist says something about other callers' traffic.
+    """
+
+    error_type = "job_not_found"
+    status_code = 404
 
 
 class UserTokenRejectedError(ServiceError):

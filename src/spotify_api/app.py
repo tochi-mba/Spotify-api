@@ -24,6 +24,8 @@ from spotify_api.api.router import api_router, root_router
 from spotify_api.config import Settings, get_settings
 from spotify_api.credentials.keyring import KeyringCredentialProvider
 from spotify_api.errors import install_exception_handlers
+from spotify_api.jobs.runner import JobRunner
+from spotify_api.jobs.store import InMemoryJobStore
 from spotify_api.logging import configure_logging
 from spotify_api.middleware import RequestContextMiddleware
 from spotify_api.spotify.client import SpotifyClient
@@ -93,12 +95,17 @@ def create_app(
             resolver, credentials = _build_graph(resolved_settings, client)
             app.state.resolver = resolver
             app.state.credentials = credentials
+            app.state.job_store = InMemoryJobStore(ttl_seconds=resolved_settings.job_ttl_seconds)
+            app.state.job_runner = JobRunner(store=app.state.job_store)
             _logger.info(
                 "application started",
                 extra={"environment": resolved_settings.environment},
             )
             yield
             _logger.info("application shutting down")
+            # Jobs outlive the request that created them, so they must be
+            # cancelled deliberately or shutdown hangs on them.
+            await app.state.job_runner.shutdown()
 
     app = FastAPI(
         title="Spotify Lookup API",
@@ -107,13 +114,18 @@ def create_app(
         lifespan=lifespan,
         openapi_tags=[
             {"name": "lookup", "description": "Batch track resolution."},
+            {"name": "jobs", "description": "Background jobs started with ?async=true."},
             {"name": "health", "description": "Liveness and readiness probes."},
         ],
     )
 
     # Available before the lifespan runs, so dependencies resolve in tests that
-    # drive the app through an ASGI transport without a lifespan.
+    # drive the app through an ASGI transport without a lifespan. The job store
+    # holds no external resource, so it needs no lifespan of its own -- only
+    # its runner does, to cancel work still in flight at shutdown.
     app.state.settings = resolved_settings
+    app.state.job_store = InMemoryJobStore(ttl_seconds=resolved_settings.job_ttl_seconds)
+    app.state.job_runner = JobRunner(store=app.state.job_store)
 
     app.add_middleware(RequestContextMiddleware)
     install_exception_handlers(app)

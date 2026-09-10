@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     max_concurrency: Annotated[int, Field(ge=1, le=64)] = 8
     max_batch_size: Annotated[int, Field(ge=1, le=200)] = 50
 
+    # --- Async jobs --------------------------------------------------------
+    confirm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 15.0
+    confirm_poll_interval_seconds: Annotated[float, Field(gt=0, le=30)] = 0.5
+    job_ttl_seconds: Annotated[float, Field(gt=0, le=86400)] = 3600.0
+
     # --- Behaviour ---------------------------------------------------------
     default_market: str | None = Field(
         default=None,

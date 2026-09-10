@@ -18,6 +18,7 @@ from spotify_api.models.responses import LookupResult, LookupStatus
 from tests.factories import make_settings
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import AsyncIterator, Sequence
 
     from fastapi import FastAPI
@@ -36,6 +37,7 @@ class FakeResolver:
         self.markets: list[str | None] = []
         self.batches: list[int] = []
         self.contexts: list[UserContext] = []
+        self.gate: asyncio.Event | None = None
 
     async def resolve(
         self,
@@ -44,6 +46,8 @@ class FakeResolver:
         context: UserContext,
         market: str | None = None,
     ) -> list[LookupResult]:
+        if self.gate is not None:
+            await self.gate.wait()
         if self.raises is not None:
             raise self.raises
         self.contexts.append(context)

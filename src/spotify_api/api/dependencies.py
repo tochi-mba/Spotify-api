@@ -18,14 +18,20 @@ from spotify_api.errors import UserTokenRejectedError
 
 if TYPE_CHECKING:
     from spotify_api.config import Settings
+    from spotify_api.jobs.protocols import JobStore
+    from spotify_api.jobs.runner import JobRunner
     from spotify_api.spotify.protocols import TrackResolver
 
 __all__ = [
     "PROFILE_HEADER",
     "USER_TOKEN_HEADER",
+    "JobRunnerDep",
+    "JobStoreDep",
     "ResolverDep",
     "SettingsDep",
     "UserContextDep",
+    "get_job_runner",
+    "get_job_store",
     "get_resolver",
     "get_settings_dependency",
     "get_user_context",
@@ -42,6 +48,18 @@ def get_resolver(request: Request) -> TrackResolver:
     """Return the resolver assembled at startup."""
     resolver: TrackResolver = request.app.state.resolver
     return resolver
+
+
+def get_job_runner(request: Request) -> JobRunner:
+    """Return the job runner assembled at startup."""
+    runner: JobRunner = request.app.state.job_runner
+    return runner
+
+
+def get_job_store(request: Request) -> JobStore:
+    """Return the job store assembled at startup."""
+    store: JobStore = request.app.state.job_store
+    return store
 
 
 def get_settings_dependency(request: Request) -> Settings:
@@ -89,6 +107,8 @@ def get_user_context(
     return UserContext(user_token=SecretStr(token), profile=profile)
 
 
+JobRunnerDep = Annotated["JobRunner", Depends(get_job_runner)]
+JobStoreDep = Annotated["JobStore", Depends(get_job_store)]
 ResolverDep = Annotated["TrackResolver", Depends(get_resolver)]
 SettingsDep = Annotated["Settings", Depends(get_settings_dependency)]
 UserContextDep = Annotated[UserContext, Depends(get_user_context)]
