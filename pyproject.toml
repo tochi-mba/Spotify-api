@@ -148,10 +148,19 @@ ignore = [
     "SLF001",  # tests may inspect private state
     "D100", "D103", "D104",
     "TRY301",  # tests raise inline to build realistic exc_info
+    "FBT001",  # parametrised booleans are the clearest way to table a test
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic evaluates annotations at runtime, so its models' imports must stay
+# at module scope.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
