@@ -8,7 +8,6 @@ exactly once at startup and are immutable thereafter. Credentials are held as
 
 from __future__ import annotations
 
-import base64
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -40,21 +39,26 @@ class Settings(BaseSettings):
     )
 
     # --- Credentials -------------------------------------------------------
-    spotify_client_id: SecretStr = Field(
-        description="Spotify application client ID (Client Credentials flow).",
+    # This service holds no Spotify credential. It asks keyring for the headers
+    # to attach, per user, per request. See docs/adr/0005-keyring-credentials.md.
+    keyring_base_url: str = Field(
+        description="Base URL of the keyring credentials service.",
     )
-    spotify_client_secret: SecretStr = Field(
-        description="Spotify application client secret (Client Credentials flow).",
+    keyring_service_token: SecretStr = Field(
+        description="This service's own keyring token, proving which service is asking.",
     )
+    keyring_default_profile: str = Field(
+        default="personal",
+        description="Profile used when a request does not name one.",
+    )
+    keyring_timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 5.0
+    credential_cache_skew_seconds: Annotated[int, Field(ge=0, le=600)] = 60
+    credential_cache_default_ttl_seconds: Annotated[int, Field(ge=0, le=3600)] = 300
 
     # --- Upstream endpoints ------------------------------------------------
     spotify_api_base_url: str = Field(
         default="https://api.spotify.com/v1",
         description="Base URL of the Spotify Web API. Overridable for tests and sandboxes.",
-    )
-    spotify_accounts_base_url: str = Field(
-        default="https://accounts.spotify.com",
-        description="Base URL of the Spotify accounts service used for token issuance.",
     )
 
     # --- Resilience --------------------------------------------------------
@@ -63,7 +67,6 @@ class Settings(BaseSettings):
     retry_backoff_base_seconds: Annotated[float, Field(ge=0, le=10)] = 0.2
     max_concurrency: Annotated[int, Field(ge=1, le=64)] = 8
     max_batch_size: Annotated[int, Field(ge=1, le=200)] = 50
-    token_expiry_skew_seconds: Annotated[int, Field(ge=0, le=600)] = 60
 
     # --- Behaviour ---------------------------------------------------------
     default_market: str | None = Field(
@@ -76,7 +79,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
     log_format: LogFormat = "json"
 
-    @field_validator("spotify_api_base_url", "spotify_accounts_base_url")
+    @field_validator("spotify_api_base_url", "keyring_base_url")
     @classmethod
     def _strip_trailing_slashes(cls, value: str) -> str:
         return value.rstrip("/")
@@ -101,17 +104,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Whether the service is running in its production environment."""
         return self.environment == "production"
-
-    def basic_auth_header(self) -> str:
-        """Return the ``Authorization`` header value for the token endpoint.
-
-        Spotify's Client Credentials flow expects HTTP Basic authentication
-        carrying ``client_id:client_secret``.
-        """
-        client_id = self.spotify_client_id.get_secret_value()
-        client_secret = self.spotify_client_secret.get_secret_value()
-        encoded = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
-        return f"Basic {encoded}"
 
 
 @lru_cache(maxsize=1)

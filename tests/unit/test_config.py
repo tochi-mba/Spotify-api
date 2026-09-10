@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import ValidationError
 
 from spotify_api.config import Settings, get_settings
 from tests.factories import make_settings
@@ -11,16 +11,16 @@ from tests.factories import make_settings
 
 @pytest.fixture
 def base_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "id-from-env")
-    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "secret-from-env")
+    monkeypatch.setenv("KEYRING_BASE_URL", "https://keyring.from-env")
+    monkeypatch.setenv("KEYRING_SERVICE_TOKEN", "service-token-from-env")
 
 
 @pytest.mark.usefixtures("base_env")
-def test_reads_credentials_from_the_environment() -> None:
-    # Credentials are supplied by the environment, which mypy cannot see.
+def test_reads_keyring_configuration_from_the_environment() -> None:
+    # Supplied by the environment, which mypy cannot see.
     settings = Settings()  # type: ignore[call-arg]
-    assert settings.spotify_client_id.get_secret_value() == "id-from-env"
-    assert settings.spotify_client_secret.get_secret_value() == "secret-from-env"
+    assert settings.keyring_base_url == "https://keyring.from-env"
+    assert settings.keyring_service_token.get_secret_value() == "service-token-from-env"
 
 
 @pytest.mark.usefixtures("base_env")
@@ -30,23 +30,27 @@ def test_operational_defaults_are_sane() -> None:
     assert settings.log_level == "INFO"
     assert settings.log_format == "json"
     assert settings.spotify_api_base_url == "https://api.spotify.com/v1"
-    assert settings.spotify_accounts_base_url == "https://accounts.spotify.com"
+    assert settings.keyring_default_profile == "personal"
+    assert settings.keyring_timeout_seconds == 5.0
+    assert settings.credential_cache_skew_seconds == 60
+    assert settings.credential_cache_default_ttl_seconds == 300
     assert settings.request_timeout_seconds == 10.0
     assert settings.max_retries == 3
     assert settings.retry_backoff_base_seconds == 0.2
     assert settings.max_concurrency == 8
     assert settings.max_batch_size == 50
-    assert settings.token_expiry_skew_seconds == 60
     assert settings.default_market is None
 
 
-def test_missing_credentials_is_a_startup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
-    monkeypatch.delenv("SPOTIFY_CLIENT_SECRET", raising=False)
+def test_missing_keyring_configuration_is_a_startup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("KEYRING_BASE_URL", raising=False)
+    monkeypatch.delenv("KEYRING_SERVICE_TOKEN", raising=False)
     with pytest.raises(ValidationError) as excinfo:
         Settings(_env_file=None)  # type: ignore[call-arg]
     missing = {error["loc"][0] for error in excinfo.value.errors()}
-    assert missing == {"spotify_client_id", "spotify_client_secret"}
+    assert missing == {"keyring_base_url", "keyring_service_token"}
 
 
 @pytest.mark.usefixtures("base_env")
@@ -58,7 +62,8 @@ def test_missing_credentials_is_a_startup_failure(monkeypatch: pytest.MonkeyPatc
         ("max_batch_size", 0),
         ("request_timeout_seconds", 0.0),
         ("retry_backoff_base_seconds", -0.1),
-        ("token_expiry_skew_seconds", -1),
+        ("keyring_timeout_seconds", 0.0),
+        ("credential_cache_skew_seconds", -1),
     ],
 )
 def test_out_of_range_values_are_rejected(field: str, value: float) -> None:
@@ -70,10 +75,10 @@ def test_out_of_range_values_are_rejected(field: str, value: float) -> None:
 def test_trailing_slashes_are_stripped_from_base_urls() -> None:
     settings = make_settings(
         spotify_api_base_url="https://example.test/v1/",
-        spotify_accounts_base_url="https://accounts.example.test//",
+        keyring_base_url="https://keyring.example.test//",
     )
     assert settings.spotify_api_base_url == "https://example.test/v1"
-    assert settings.spotify_accounts_base_url == "https://accounts.example.test"
+    assert settings.keyring_base_url == "https://keyring.example.test"
 
 
 @pytest.mark.usefixtures("base_env")
@@ -89,22 +94,11 @@ def test_unknown_market_code_is_rejected() -> None:
 
 
 @pytest.mark.usefixtures("base_env")
-def test_credentials_never_appear_in_repr_or_dump() -> None:
+def test_the_service_token_never_appears_in_repr_or_dump() -> None:
     settings = Settings()  # type: ignore[call-arg]
     rendered = f"{settings!r} {settings.model_dump()} {settings.model_dump_json()}"
-    assert "id-from-env" not in rendered
-    assert "secret-from-env" not in rendered
+    assert "service-token-from-env" not in rendered
     assert "**********" in repr(settings)
-
-
-@pytest.mark.usefixtures("base_env")
-def test_basic_auth_header_encodes_credentials() -> None:
-    settings = make_settings(
-        spotify_client_id=SecretStr("abc"),
-        spotify_client_secret=SecretStr("123"),
-    )
-    # The expected header is the base64 encoding of "abc:123".
-    assert settings.basic_auth_header() == "Basic YWJjOjEyMw=="
 
 
 @pytest.mark.usefixtures("base_env")

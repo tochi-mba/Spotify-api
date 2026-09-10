@@ -13,8 +13,8 @@ concurrency:
 env:
   # The suite is hermetic -- Spotify is faked at the transport -- but settings
   # still parse at import, and credentials are required by design.
-  SPOTIFY_CLIENT_ID: ci-dummy-client-id
-  SPOTIFY_CLIENT_SECRET: ci-dummy-client-secret
+  KEYRING_BASE_URL: http://keyring.invalid
+  KEYRING_SERVICE_TOKEN: ci-dummy-service-token
   ENVIRONMENT: test
 
 jobs:
@@ -67,7 +67,8 @@ jobs:
       - name: Boot it and check /healthy
         run: |
           docker run -d --name probe -p 8000:8000 \
-            -e SPOTIFY_CLIENT_ID=ci-dummy -e SPOTIFY_CLIENT_SECRET=ci-dummy \
+            -e KEYRING_BASE_URL=http://keyring.invalid \
+            -e KEYRING_SERVICE_TOKEN=ci-dummy \
             spotify-api:ci
           for _ in $(seq 1 30); do
             curl -sf localhost:8000/healthy && break

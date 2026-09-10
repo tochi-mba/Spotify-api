@@ -22,11 +22,16 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BatchTooLargeError",
+    "CredentialUnavailableError",
+    "KeyringUnavailableError",
+    "NoActiveDeviceError",
+    "PremiumRequiredError",
     "ServiceError",
     "SpotifyAuthError",
     "SpotifyRateLimitError",
     "SpotifyUnavailableError",
     "TrackLookupError",
+    "UserTokenRejectedError",
     "install_exception_handlers",
 ]
 
@@ -65,11 +70,67 @@ class BatchTooLargeError(ServiceError):
     status_code = 422
 
 
+class UserTokenRejectedError(ServiceError):
+    """The caller's keyring user token is missing, expired, or not for us.
+
+    A 401 rather than a 503: the caller can fix this by presenting a valid
+    token, which is not true of the other credential failures.
+    """
+
+    error_type = "user_token_rejected"
+    status_code = 401
+
+
+class CredentialUnavailableError(ServiceError):
+    """keyring has no usable Spotify credential for this user and profile.
+
+    The grant was revoked, never made, or could not be refreshed. Retrying
+    cannot help -- the user must reconnect Spotify in keyring.
+    """
+
+    error_type = "credential_unavailable"
+    status_code = 502
+
+
+class KeyringUnavailableError(ServiceError):
+    """keyring itself is unreachable or failing.
+
+    Distinct from CredentialUnavailableError on purpose: this one is worth
+    retrying, and it points at an operator problem rather than a user one.
+    """
+
+    error_type = "keyring_unavailable"
+    status_code = 503
+
+
 class SpotifyAuthError(ServiceError):
     """Spotify rejected our credentials, or a token could not be obtained."""
 
     error_type = "spotify_auth_error"
     status_code = 503
+
+
+class PremiumRequiredError(ServiceError):
+    """The action needs Spotify Premium and this account does not have it.
+
+    Named separately because it is the single most common reason playback
+    fails, and "upgrade your account" is a useful thing to be told.
+    """
+
+    error_type = "premium_required"
+    status_code = 403
+
+
+class NoActiveDeviceError(ServiceError):
+    """Spotify has no device to act on.
+
+    Playback commands need somewhere to play. Spotify reports this as a bare
+    404, which is indistinguishable from a missing resource unless you look at
+    the route -- so it is translated here into something actionable.
+    """
+
+    error_type = "no_active_device"
+    status_code = 409
 
 
 class SpotifyRateLimitError(ServiceError):

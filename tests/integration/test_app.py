@@ -36,7 +36,8 @@ async def test_one_http_client_is_shared_by_the_whole_graph() -> None:
         resolver = app.state.resolver
         shared = app.state.http_client
         assert resolver._client._client is shared
-        assert resolver._client._tokens._client is shared
+        assert resolver._client._credentials._client is shared
+        assert app.state.credentials._client is shared
 
 
 def test_settings_are_available_before_the_lifespan_runs() -> None:
@@ -47,12 +48,12 @@ def test_settings_are_available_before_the_lifespan_runs() -> None:
 def test_the_factory_falls_back_to_environment_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "env-id")
-    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "env-secret")
+    monkeypatch.setenv("KEYRING_BASE_URL", "https://keyring.from-env")
+    monkeypatch.setenv("KEYRING_SERVICE_TOKEN", "env-service-token")
     get_settings.cache_clear()
     try:
         app = create_app()
-        assert app.state.settings.spotify_client_id.get_secret_value() == "env-id"
+        assert app.state.settings.keyring_base_url == "https://keyring.from-env"
     finally:
         get_settings.cache_clear()
 
@@ -104,8 +105,8 @@ def test_the_module_entrypoint_starts_uvicorn(monkeypatch: pytest.MonkeyPatch) -
         recorded["target"] = target
         recorded["kwargs"] = kwargs
 
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "env-id")
-    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "env-secret")
+    monkeypatch.setenv("KEYRING_BASE_URL", "https://keyring.from-env")
+    monkeypatch.setenv("KEYRING_SERVICE_TOKEN", "env-service-token")
     monkeypatch.setattr("uvicorn.run", fake_run)
 
     get_settings.cache_clear()

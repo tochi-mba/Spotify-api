@@ -22,10 +22,10 @@ from fastapi import FastAPI
 import spotify_api
 from spotify_api.api.router import api_router, root_router
 from spotify_api.config import Settings, get_settings
+from spotify_api.credentials.keyring import KeyringCredentialProvider
 from spotify_api.errors import install_exception_handlers
 from spotify_api.logging import configure_logging
 from spotify_api.middleware import RequestContextMiddleware
-from spotify_api.spotify.auth import ClientCredentialsProvider
 from spotify_api.spotify.client import SpotifyClient
 from spotify_api.spotify.resolver import SpotifyTrackResolver
 
@@ -48,11 +48,18 @@ comes back as a `not_found` or `error` result rather than failing the batch.
 """
 
 
-def _build_resolver(settings: Settings, client: httpx.AsyncClient) -> SpotifyTrackResolver:
-    """Assemble the Spotify object graph over a shared HTTP client."""
-    token_provider = ClientCredentialsProvider(client=client, settings=settings)
-    spotify_client = SpotifyClient(client=client, token_provider=token_provider, settings=settings)
-    return SpotifyTrackResolver(client=spotify_client, settings=settings)
+def _build_graph(
+    settings: Settings, client: httpx.AsyncClient
+) -> tuple[SpotifyTrackResolver, KeyringCredentialProvider]:
+    """Assemble the object graph over a shared HTTP client.
+
+    One client serves both keyring and Spotify: they are different hosts, but
+    httpx pools per host anyway, and a single client keeps shutdown to one
+    close rather than two things to remember.
+    """
+    credentials = KeyringCredentialProvider(client=client, settings=settings)
+    spotify_client = SpotifyClient(client=client, credentials=credentials, settings=settings)
+    return SpotifyTrackResolver(client=spotify_client, settings=settings), credentials
 
 
 def create_app(
@@ -83,7 +90,9 @@ def create_app(
             transport=transport,
         ) as client:
             app.state.http_client = client
-            app.state.resolver = _build_resolver(resolved_settings, client)
+            resolver, credentials = _build_graph(resolved_settings, client)
+            app.state.resolver = resolver
+            app.state.credentials = credentials
             _logger.info(
                 "application started",
                 extra={"environment": resolved_settings.environment},

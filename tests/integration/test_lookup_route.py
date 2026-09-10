@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from spotify_api.errors import SpotifyAuthError, SpotifyUnavailableError
+from spotify_api.errors import (
+    CredentialUnavailableError,
+    KeyringUnavailableError,
+    SpotifyAuthError,
+    SpotifyUnavailableError,
+    UserTokenRejectedError,
+)
 from spotify_api.models.requests import LookupItem
 from spotify_api.models.responses import Album, Artist, LookupResult, LookupStatus, Track
 
@@ -183,3 +189,86 @@ async def test_an_unexpected_failure_is_a_500_with_an_opaque_message(
 
 async def test_a_get_is_not_allowed(client: httpx.AsyncClient) -> None:
     assert (await client.get(ENDPOINT)).status_code == 405
+
+
+async def test_a_request_without_a_keyring_token_is_refused(
+    anonymous_client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    response = await anonymous_client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+
+    assert response.status_code == 401
+    error = response.json()["error"]
+    assert error["type"] == "user_token_rejected"
+    assert "X-Keyring-User-Token" in error["message"]
+    assert resolver.batches == []
+
+
+async def test_a_blank_keyring_token_is_refused(
+    anonymous_client: httpx.AsyncClient,
+) -> None:
+    response = await anonymous_client.post(
+        ENDPOINT, json={"items": [{"name": "x"}]}, headers={"X-Keyring-User-Token": "   "}
+    )
+    assert response.status_code == 401
+
+
+async def test_the_user_token_reaches_the_resolver(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    await client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+    assert resolver.contexts[0].user_token.get_secret_value() == "test-user-token"
+
+
+async def test_the_profile_defaults_to_the_configured_one(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    await client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+    assert resolver.contexts[0].profile == "personal"
+
+
+async def test_a_caller_may_name_a_different_profile(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    await client.post(
+        ENDPOINT, json={"items": [{"name": "x"}]}, headers={"X-Keyring-Profile": "work"}
+    )
+    assert resolver.contexts[0].profile == "work"
+
+
+async def test_a_blank_profile_header_falls_back_to_the_default(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    await client.post(
+        ENDPOINT, json={"items": [{"name": "x"}]}, headers={"X-Keyring-Profile": "  "}
+    )
+    assert resolver.contexts[0].profile == "personal"
+
+
+async def test_a_refused_keyring_token_is_reported_as_401(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    resolver.raises = UserTokenRejectedError("keyring refused the user token")
+    response = await client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["type"] == "user_token_rejected"
+
+
+async def test_a_missing_spotify_connection_is_reported_distinctly(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    resolver.raises = CredentialUnavailableError("this profile is not connected to Spotify")
+    response = await client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+
+    assert response.status_code == 502
+    assert response.json()["error"]["type"] == "credential_unavailable"
+
+
+async def test_keyring_being_down_is_reported_distinctly(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    resolver.raises = KeyringUnavailableError("keyring is unreachable")
+    response = await client.post(ENDPOINT, json={"items": [{"name": "x"}]})
+
+    assert response.status_code == 503
+    assert response.json()["error"]["type"] == "keyring_unavailable"

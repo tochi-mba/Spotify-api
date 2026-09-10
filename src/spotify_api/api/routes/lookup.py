@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from spotify_api.api.dependencies import ResolverDep, SettingsDep
+from spotify_api.api.dependencies import ResolverDep, SettingsDep, UserContextDep
 from spotify_api.errors import BatchTooLargeError
 from spotify_api.logging import current_request_id
 from spotify_api.models.requests import LookupRequest
@@ -42,7 +42,10 @@ router = APIRouter(tags=["lookup"])
     },
 )
 async def lookup(
-    payload: LookupRequest, resolver: ResolverDep, settings: SettingsDep
+    payload: LookupRequest,
+    resolver: ResolverDep,
+    settings: SettingsDep,
+    context: UserContextDep,
 ) -> LookupResponse:
     """Resolve every submitted item and return one result per item.
 
@@ -58,5 +61,5 @@ async def lookup(
             message, limit=settings.max_batch_size, received=len(payload.items)
         )
 
-    results = await resolver.resolve(payload.items, market=payload.market)
+    results = await resolver.resolve(payload.items, market=payload.market, context=context)
     return LookupResponse(request_id=current_request_id(), results=results)

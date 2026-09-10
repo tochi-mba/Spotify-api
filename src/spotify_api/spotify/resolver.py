@@ -17,7 +17,12 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from spotify_api.errors import ServiceError
+from spotify_api.errors import (
+    CredentialUnavailableError,
+    KeyringUnavailableError,
+    ServiceError,
+    UserTokenRejectedError,
+)
 from spotify_api.models.responses import LookupResult, LookupStatus
 from spotify_api.spotify.mappers import to_track
 
@@ -25,6 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from spotify_api.config import Settings
+    from spotify_api.credentials.models import UserContext
     from spotify_api.models.requests import LookupItem
     from spotify_api.spotify.client import SpotifyClient
 
@@ -36,6 +42,16 @@ _logger = logging.getLogger(__name__)
 #: failure detail stays in the logs, where it belongs.
 _OPAQUE_ERROR = "an unexpected error occurred while resolving this item"
 
+#: Failures that are properties of the *request*, not of any one item. If the
+#: caller's token is refused or keyring cannot produce a credential, no item can
+#: succeed -- answering 200 with fifty identical errors would be worse than one
+#: honest 401, so these propagate and fail the batch.
+_REQUEST_LEVEL_FAILURES = (
+    UserTokenRejectedError,
+    CredentialUnavailableError,
+    KeyringUnavailableError,
+)
+
 
 class SpotifyTrackResolver:
     """Resolves batches of lookup items against Spotify."""
@@ -46,7 +62,7 @@ class SpotifyTrackResolver:
         self._settings = settings
 
     async def resolve(
-        self, items: Sequence[LookupItem], *, market: str | None = None
+        self, items: Sequence[LookupItem], *, context: UserContext, market: str | None = None
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order.
 
@@ -61,7 +77,7 @@ class SpotifyTrackResolver:
 
         async def resolve_one(index: int, item: LookupItem) -> LookupResult:
             async with semaphore:
-                return await self._resolve_item(index, item, effective_market)
+                return await self._resolve_item(index, item, effective_market, context)
 
         # gather preserves input order regardless of completion order, which is
         # what lets the caller line results up with what they submitted.
@@ -71,10 +87,16 @@ class SpotifyTrackResolver:
         """Whether Spotify is currently usable. Never raises."""
         return await self._client.check_health()
 
-    async def _resolve_item(self, index: int, item: LookupItem, market: str | None) -> LookupResult:
+    async def _resolve_item(
+        self, index: int, item: LookupItem, market: str | None, context: UserContext
+    ) -> LookupResult:
         """Resolve a single item, converting any failure into a result."""
         try:
-            raw: dict[str, Any] | None = await self._client.search_track(item, market=market)
+            raw: dict[str, Any] | None = await self._client.search_track(
+                item, market=market, context=context
+            )
+        except _REQUEST_LEVEL_FAILURES:
+            raise
         except ServiceError as exc:
             _logger.warning(
                 "item lookup failed", extra={"item_index": index, "reason": exc.error_type}

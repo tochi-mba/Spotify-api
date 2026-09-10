@@ -149,7 +149,7 @@ ignore = [
     "S105", "S106", "S107",  # dummy credentials are dummy on purpose
     "PLR2004", # magic values are fine in assertions
     "SLF001",  # tests may inspect private state
-    "D100", "D102", "D103", "D104", "D107",  # test helpers document themselves
+    "D100", "D101", "D102", "D103", "D104", "D107",  # test helpers document themselves
     "EM101",   # inline messages keep a test's intent on one line
     "TRY301",  # tests raise inline to build realistic exc_info
     "FBT001",  # parametrised booleans are the clearest way to table a test

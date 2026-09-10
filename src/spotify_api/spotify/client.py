@@ -1,27 +1,37 @@
-"""The Spotify Web API search client.
+"""The Spotify Web API client.
 
-Everything here exists because of a failure Spotify actually produces:
+One generic ``request`` method carries the retry ladder for every endpoint in
+the service, so a new resource group is a set of thin callers rather than a
+second copy of this logic.
 
-* **401** -- our cached token expired earlier than we believed. Refresh once and
-  retry; a second 401 means the credentials themselves are wrong.
-* **403** -- the credentials are not permitted to do this. Retrying cannot help.
-* **429** -- rate limited. Spotify tells us how long to wait in ``Retry-After``
-  and that instruction is honoured in preference to our own backoff.
-* **5xx / timeouts / resets** -- transient. Retried with exponential backoff,
-  capped so that one slow item cannot hold a batch open indefinitely.
+Every rung exists because of a failure Spotify actually produces:
 
-Sleeping is injected so the retry ladder is asserted rather than waited out.
+* **401** -- the access token expired. Drop the cached credential, ask keyring
+  again (it refreshes the grant) and retry once. A second 401 is a real
+  authorisation problem.
+* **403** -- not permitted. Most often *not Premium*, which playback requires,
+  so that case is named explicitly rather than reported as a generic refusal.
+* **404 on a player route** -- no active device. Also named, because "start a
+  speaker first" is a different instruction from "that does not exist".
+* **429** -- rate limited. ``Retry-After`` is honoured over our own backoff.
+* **5xx / timeouts / resets** -- transient. Exponential backoff, capped so one
+  slow call cannot hold a batch open.
+
+Sleeping is injected so the ladder is asserted rather than waited out.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from spotify_api.errors import (
+    NoActiveDeviceError,
+    PremiumRequiredError,
     SpotifyAuthError,
     SpotifyRateLimitError,
     SpotifyUnavailableError,
@@ -30,100 +40,127 @@ from spotify_api.spotify.mappers import first_track
 from spotify_api.spotify.query import build_search_query
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     from spotify_api.config import Settings
+    from spotify_api.credentials.models import UserContext
+    from spotify_api.credentials.protocols import CredentialProvider
     from spotify_api.models.requests import LookupItem
-    from spotify_api.spotify.protocols import TokenProvider
 
-__all__ = ["SpotifyClient"]
+__all__ = ["SpotifyClient", "SpotifyResponse"]
 
 _logger = logging.getLogger(__name__)
 
 _UNAUTHORIZED = 401
 _FORBIDDEN = 403
+_NOT_FOUND = 404
 _TOO_MANY_REQUESTS = 429
+_NO_CONTENT = 204
+
+#: Marker Spotify uses in 403 bodies when an account is not Premium.
+_PREMIUM_MARKERS = ("premium", "player command failed: premium required")
+
+#: Marker Spotify uses in 404 bodies when nothing is playing anywhere.
+_NO_DEVICE_MARKERS = ("no active device", "device not found")
+
+
+@dataclass(frozen=True)
+class SpotifyResponse:
+    """A successful answer from Spotify.
+
+    Carries the status because it is load-bearing: most player commands answer
+    ``204 No Content``, and "accepted with no body" is a different thing from
+    "here is your object".
+    """
+
+    status_code: int
+    body: Any | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        """Whether Spotify answered without a body."""
+        return self.body is None
+
+
+def _encode(value: Any) -> str:  # noqa: ANN401
+    """Render a query value the way Spotify expects it.
+
+    Booleans in particular: Python's ``str(True)`` is ``"True"``, which Spotify
+    rejects. Lists become comma-joined, which is how its ``ids`` parameters work.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return ",".join(_encode(item) for item in value)
+    return str(value)
 
 
 class SpotifyClient:
-    """A thin, resilient wrapper over Spotify's ``/search`` endpoint."""
+    """A resilient, credential-aware wrapper over the Spotify Web API."""
 
-    #: Upper bound on any single backoff sleep, in seconds. Without it a
-    #: generous retry budget could park a request for minutes.
+    #: Upper bound on any single backoff sleep, in seconds.
     MAX_BACKOFF_SECONDS = 8.0
 
     def __init__(
         self,
         *,
         client: httpx.AsyncClient,
-        token_provider: TokenProvider,
+        credentials: CredentialProvider,
         settings: Settings,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
-        """Store collaborators; no traffic is generated until a search runs."""
+        """Store collaborators; no traffic is generated until a call is made."""
         self._client = client
-        self._tokens = token_provider
+        self._credentials = credentials
         self._settings = settings
         self._sleep = sleeper
 
-    async def search_track(self, item: LookupItem, *, market: str | None) -> dict[str, Any] | None:
-        """Return the best-matching raw track for ``item``, or ``None``.
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        context: UserContext,
+        params: Mapping[str, Any] | None = None,
+        json: Any = None,  # noqa: ANN401
+    ) -> SpotifyResponse:
+        """Call a Spotify endpoint on one user's behalf.
 
         Args:
-            item: The validated lookup item to search for.
-            market: ISO 3166-1 alpha-2 market, or ``None`` to leave it to
-                Spotify.
+            method: HTTP method, e.g. ``"GET"`` or ``"PUT"``.
+            path: Path below the API base, e.g. ``"/me/player/play"``.
+            context: Whose account to act on.
+            params: Query parameters. ``None`` values are dropped, booleans are
+                lower-cased and lists comma-joined.
+            json: JSON body, when the endpoint takes one.
 
         Returns:
-            Spotify's raw track object, or ``None`` when nothing matched.
+            The status and decoded body.
 
         Raises:
-            SpotifyAuthError: Credentials were rejected.
+            SpotifyAuthError: Spotify refused the credential twice.
+            PremiumRequiredError: The account is not Premium.
+            NoActiveDeviceError: No device is available to play on.
             SpotifyRateLimitError: Rate limited past the retry budget.
             SpotifyUnavailableError: Unreachable, or failing past the budget.
         """
-        params: dict[str, str] = {
-            "q": build_search_query(item),
-            "type": "track",
-            "limit": "1",
-        }
-        if market is not None:
-            params["market"] = market
-
-        payload = await self._get_with_retries("/search", params=params)
-        return first_track(payload)
-
-    async def check_health(self) -> bool:
-        """Whether a token can currently be obtained. Never raises."""
-        try:
-            await self._tokens.get_token()
-        except (SpotifyAuthError, SpotifyUnavailableError):
-            _logger.warning("spotify readiness check failed", exc_info=True)
-            return False
-        return True
-
-    # -- internals ----------------------------------------------------------
-
-    async def _get_with_retries(self, path: str, *, params: dict[str, str]) -> dict[str, Any]:
-        """Issue a GET, applying the auth-refresh and backoff ladders.
-
-        Re-authentication is deliberately kept out of the retry budget: a stale
-        token is a correction to make, not a failed call to repeat, and it can
-        happen at most once per request.
-        """
         url = f"{self._settings.spotify_api_base_url}{path}"
+        query = {key: _encode(value) for key, value in (params or {}).items() if value is not None}
         budget = self._settings.max_retries
         attempt = 0
-        refreshed = False
-        last_retry_after: float | None = None
+        reauthenticated = False
 
         while True:
-            token = await self._tokens.get_token(force_refresh=refreshed)
+            credential = await self._credentials.resolve(
+                user_token=context.user_token.get_secret_value(), profile=context.profile
+            )
             try:
-                response = await self._client.get(
+                response = await self._client.request(
+                    method,
                     url,
-                    params=params,
-                    headers={"Authorization": f"Bearer {token}"},
+                    params={**query, **credential.query_params},
+                    headers=credential.headers,
+                    json=json,
                     timeout=self._settings.request_timeout_seconds,
                 )
             except httpx.HTTPError as exc:
@@ -134,24 +171,36 @@ class SpotifyClient:
                 attempt += 1
                 continue
 
-            if response.status_code == _UNAUTHORIZED and not refreshed:
-                _logger.info("spotify rejected the access token; refreshing once")
-                refreshed = True
+            if response.status_code == _UNAUTHORIZED and not reauthenticated:
+                # The token keyring gave us has expired sooner than advertised.
+                # Drop it so keyring refreshes the grant, then try once more.
+                # This is a correction, not a retry, so it costs no budget.
+                _logger.info("spotify rejected the credential; re-resolving once")
+                self._credentials.invalidate(
+                    user_token=context.user_token.get_secret_value(), profile=context.profile
+                )
+                reauthenticated = True
                 continue
 
-            if response.status_code in (_UNAUTHORIZED, _FORBIDDEN):
-                message = "Spotify rejected the request as unauthorised"
-                raise SpotifyAuthError(message, status_code=response.status_code)
+            if response.status_code == _UNAUTHORIZED:
+                message = "Spotify rejected the credential"
+                raise SpotifyAuthError(message, status_code=_UNAUTHORIZED)
+
+            if response.status_code == _FORBIDDEN:
+                self._raise_forbidden(response)
+
+            if response.status_code == _NOT_FOUND:
+                self._raise_not_found(response, path)
 
             if response.status_code == _TOO_MANY_REQUESTS:
-                last_retry_after = self._retry_after(response, attempt)
+                retry_after = self._retry_after(response, attempt)
                 if attempt >= budget:
                     message = "Spotify rate limit exceeded and the retry budget is exhausted"
-                    raise SpotifyRateLimitError(message, retry_after=last_retry_after)
+                    raise SpotifyRateLimitError(message, retry_after=retry_after)
                 _logger.warning(
-                    "spotify rate limited the request", extra={"retry_after": last_retry_after}
+                    "spotify rate limited the request", extra={"retry_after": retry_after}
                 )
-                await self._sleep(last_retry_after)
+                await self._sleep(retry_after)
                 attempt += 1
                 continue
 
@@ -164,10 +213,65 @@ class SpotifyClient:
                 continue
 
             if response.status_code >= httpx.codes.BAD_REQUEST:
-                message = "Spotify returned an unexpected client error"
-                raise SpotifyUnavailableError(message, status_code=response.status_code)
+                message = "Spotify rejected the request"
+                raise SpotifyUnavailableError(
+                    message, status_code=response.status_code, detail=_message_of(response)
+                )
 
             return self._parse(response)
+
+    async def search_track(
+        self, item: LookupItem, *, market: str | None, context: UserContext
+    ) -> dict[str, Any] | None:
+        """Return the best-matching raw track for ``item``, or ``None``."""
+        response = await self.request(
+            "GET",
+            "/search",
+            context=context,
+            params={
+                "q": build_search_query(item),
+                "type": "track",
+                "limit": 1,
+                "market": market,
+            },
+        )
+        payload = response.body
+        if not isinstance(payload, dict):
+            message = "the Spotify search response was not a JSON object"
+            raise SpotifyUnavailableError(message)
+        return first_track(payload)
+
+    async def check_health(self) -> bool:
+        """Whether the credential source is reachable. Never raises."""
+        return await self._credentials.check_health()
+
+    # -- internals ----------------------------------------------------------
+
+    @staticmethod
+    def _raise_forbidden(response: httpx.Response) -> None:
+        """Distinguish "you are not Premium" from every other refusal."""
+        detail = (_message_of(response) or "").lower()
+        if any(marker in detail for marker in _PREMIUM_MARKERS):
+            message = (
+                "this action requires a Spotify Premium account; playback control is "
+                "not available on free accounts"
+            )
+            raise PremiumRequiredError(message)
+        message = "Spotify refused the request"
+        raise SpotifyAuthError(message, status_code=_FORBIDDEN, detail=_message_of(response))
+
+    @staticmethod
+    def _raise_not_found(response: httpx.Response, path: str) -> None:
+        """Distinguish "no device is awake" from "that object does not exist"."""
+        detail = (_message_of(response) or "").lower()
+        if path.startswith("/me/player") or any(m in detail for m in _NO_DEVICE_MARKERS):
+            message = (
+                "no active Spotify device was found; open Spotify on a device, or pass "
+                "device_id explicitly"
+            )
+            raise NoActiveDeviceError(message)
+        message = "Spotify has no such resource"
+        raise SpotifyUnavailableError(message, status_code=_NOT_FOUND, detail=_message_of(response))
 
     def _backoff(self, attempt: int) -> float:
         """Exponential backoff for ``attempt``, capped."""
@@ -187,14 +291,27 @@ class SpotifyClient:
         return self._backoff(attempt)
 
     @staticmethod
-    def _parse(response: httpx.Response) -> dict[str, Any]:
-        """Decode a successful search response."""
+    def _parse(response: httpx.Response) -> SpotifyResponse:
+        """Decode a successful response, tolerating an empty body."""
+        if response.status_code == _NO_CONTENT or not response.content:
+            return SpotifyResponse(status_code=response.status_code)
         try:
-            decoded: object = response.json()
+            return SpotifyResponse(status_code=response.status_code, body=response.json())
         except ValueError as exc:
-            message = "the Spotify search response could not be understood"
+            message = "the Spotify response could not be understood"
             raise SpotifyUnavailableError(message) from exc
-        if not isinstance(decoded, dict):
-            message = "the Spotify search response was not a JSON object"
-            raise SpotifyUnavailableError(message)
-        return decoded
+
+
+def _message_of(response: httpx.Response) -> str | None:
+    """Pull Spotify's own error message out of a failure body."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        return message if isinstance(message, str) else None
+    return error if isinstance(error, str) else None

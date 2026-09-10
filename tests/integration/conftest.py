@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from fastapi import FastAPI
 
+    from spotify_api.credentials.models import UserContext
     from spotify_api.models.requests import LookupItem
 
 
@@ -34,12 +35,18 @@ class FakeResolver:
         self.healthy = True
         self.markets: list[str | None] = []
         self.batches: list[int] = []
+        self.contexts: list[UserContext] = []
 
     async def resolve(
-        self, items: Sequence[LookupItem], *, market: str | None = None
+        self,
+        items: Sequence[LookupItem],
+        *,
+        context: UserContext,
+        market: str | None = None,
     ) -> list[LookupResult]:
         if self.raises is not None:
             raise self.raises
+        self.contexts.append(context)
         self.markets.append(market)
         self.batches.append(len(items))
         results = []
@@ -74,8 +81,24 @@ def app(resolver: FakeResolver, settings_overrides: dict[str, Any]) -> FastAPI:
     return application
 
 
+#: Every route needs one; individual tests override it to prove the failure paths.
+USER_TOKEN = "test-user-token"
+
+
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Keyring-User-Token": USER_TOKEN},
+    ) as http_client:
+        yield http_client
+
+
+@pytest.fixture
+async def anonymous_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """A client that presents no keyring token."""
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client

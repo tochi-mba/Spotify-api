@@ -13,19 +13,11 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from spotify_api.credentials.models import UserContext
     from spotify_api.models.requests import LookupItem
     from spotify_api.models.responses import LookupResult
 
-__all__ = ["TokenProvider", "TrackResolver"]
-
-
-@runtime_checkable
-class TokenProvider(Protocol):
-    """Supplies a usable Spotify access token."""
-
-    async def get_token(self, *, force_refresh: bool = False) -> str:
-        """Return an access token, refreshing it when asked or when stale."""
-        ...
+__all__ = ["TrackResolver"]
 
 
 @runtime_checkable
@@ -33,7 +25,7 @@ class TrackResolver(Protocol):
     """Resolves submitted items into results, one for one, in order."""
 
     async def resolve(
-        self, items: Sequence[LookupItem], *, market: str | None = None
+        self, items: Sequence[LookupItem], *, context: UserContext, market: str | None = None
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order."""
         ...
