@@ -21,16 +21,9 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "httpx>=0.27",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "pytest-cov>=6.0",
-    "ruff>=0.8",
-    "mypy>=1.13",
-    "pre-commit>=4.0",
+    "keyring-client",
+    "settings-client",
+    "structlog>=24.4",
 ]
 
 [project.scripts]
@@ -38,6 +31,17 @@ spotify-api = "spotify_api.__main__:main"
 
 [project.urls]
 Repository = "https://github.com/tochi-mba/Spotify-api"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.1",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -77,17 +81,23 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 branch = true
 source = ["spotify_api"]
+parallel = false
+
+[tool.coverage.paths]
+source = ["src/spotify_api", "*/site-packages/spotify_api"]
 
 [tool.coverage.report]
 show_missing = true
-skip_covered = true
-# The ONLY sanctioned exclusions. Do not add to this list to dodge the gate --
-# see AGENTS.md, "The coverage rule".
-exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "raise NotImplementedError",
+skip_covered = false
+fail_under = 100
+# Only non-executable lines are excluded. Nothing that contains real logic is
+# excluded, and `# pragma: no cover` is not used anywhere in src/. See AGENTS.md.
+exclude_also = [
     "^\\s*\\.\\.\\.$",
+    "^\\s*if TYPE_CHECKING:",
+    "^\\s*@(?:typing\\.)?overload$",
+    "^\\s*raise NotImplementedError$",
+    "^\\s*if __name__ == .__main__.:$",
 ]
 
 # ---------------------------------------------------------------------------
@@ -100,53 +110,58 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "A",    # flake8-builtins
-    "ANN",  # flake8-annotations
-    "ARG",  # flake8-unused-arguments
-    "ASYNC",# flake8-async
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "D",    # pydocstyle
-    "DTZ",  # flake8-datetimez
-    "E",    # pycodestyle errors
-    "EM",   # flake8-errmsg
-    "ERA",  # eradicate
-    "F",    # pyflakes
-    "FBT",  # flake8-boolean-trap
-    "I",    # isort
-    "ICN",  # flake8-import-conventions
-    "N",    # pep8-naming
-    "PGH",  # pygrep-hooks
-    "PIE",  # flake8-pie
-    "PL",   # pylint
-    "PT",   # flake8-pytest-style
-    "PTH",  # flake8-use-pathlib
-    "RET",  # flake8-return
-    "RSE",  # flake8-raise
-    "RUF",  # ruff-specific
-    "S",    # flake8-bandit
-    "SIM",  # flake8-simplify
-    "SLF",  # flake8-self
-    "T20",  # flake8-print
-    "TCH",  # flake8-type-checking
-    "TID",  # flake8-tidy-imports
-    "TRY",  # tryceratops
-    "UP",   # pyupgrade
-    "W",    # pycodestyle warnings
+    "A",      # flake8-builtins
+    "ANN",    # flake8-annotations
+    "ARG",    # flake8-unused-arguments
+    "ASYNC",  # flake8-async
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "D",      # pydocstyle (kept: AGENTS.md requires Google-style docstrings)
+    "DTZ",    # flake8-datetimez
+    "E",      # pycodestyle errors
+    "EM",     # flake8-errmsg
+    "ERA",    # eradicate
+    "F",      # pyflakes
+    "FA",     # future annotations
+    "FBT",    # flake8-boolean-trap
+    "I",      # isort
+    "ICN",    # flake8-import-conventions
+    "N",      # pep8-naming
+    "PERF",   # performance anti-patterns
+    "PGH",    # pygrep-hooks
+    "PIE",    # flake8-pie
+    "PL",     # pylint
+    "PT",     # flake8-pytest-style
+    "PTH",    # flake8-use-pathlib
+    "RET",    # flake8-return
+    "RSE",    # flake8-raise
+    "RUF",    # ruff-specific
+    "S",      # flake8-bandit
+    "SIM",    # flake8-simplify
+    "SLF",    # flake8-self
+    "T20",    # flake8-print
+    "TC",     # flake8-type-checking
+    "TID",    # flake8-tidy-imports
+    "TRY",    # tryceratops
+    "UP",     # pyupgrade
+    "W",      # pycodestyle warnings
 ]
 ignore = [
-    "D203",   # conflicts with D211
-    "D213",   # conflicts with D212
-    "TRY003", # our exceptions carry explicit messages by design
+    "D203",    # conflicts with D211
+    "D213",    # conflicts with D212
+    "TRY003",  # our exceptions carry explicit messages by design
 ]
+# Relative to Media-tool: D, FBT and PGH stay selected (docstrings are required here;
+# the other two already pass). ANN401 stays as inline noqa rather than a blanket ignore.
+# FA and PERF were adopted with zero findings.
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI resolves route signatures at runtime to build the OpenAPI schema and
 # the dependency graph, so these imports cannot move into TYPE_CHECKING blocks.
-"src/spotify_api/api/**" = ["TC001", "TC002"]
+"src/spotify_api/api/**" = ["TC001", "TC002", "TC003"]
 # Route handlers declare their dependencies as parameters; FastAPI's whole DI
 # model depends on it, and a boolean query flag is a boolean query flag.
-"src/spotify_api/api/routes/**" = ["TC001", "TC002", "PLR0913", "PLR0917", "FBT001", "FBT002"]
+"src/spotify_api/api/routes/**" = ["TC001", "TC002", "TC003", "PLR0913", "PLR0917", "FBT001", "FBT002"]
 # Spotify's own endpoints take many optional parameters; mirroring them one for
 # one is clearer than inventing an options object per call.
 "src/spotify_api/spotify/resources/**" = ["PLR0913", "PLR0917"]
@@ -161,7 +176,9 @@ ignore = [
     "FBT001",  # parametrised booleans are the clearest way to table a test
     "ANN401",  # fixture factories are genuinely polymorphic
     "ARG002",  # fakes must match the real signature they stand in for
+    "TC001",
     "TC002",   # pytest is used at runtime by fixtures and marks
+    "TC003",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -178,6 +195,9 @@ runtime-evaluated-base-classes = [
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
+[tool.ruff.lint.isort]
+known-first-party = ["spotify_api"]
+
 # ---------------------------------------------------------------------------
 # mypy
 # ---------------------------------------------------------------------------
@@ -187,9 +207,93 @@ files = ["src", "tests"]
 mypy_path = "src"
 strict = true
 warn_unreachable = true
+warn_unused_ignores = true
 warn_no_return = true
 disallow_any_generics = true
+disallow_any_unimported = true
 no_implicit_reexport = true
 show_error_codes = true
 pretty = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# ---------------------------------------------------------------------------
+# Architecture (layering is enforced, not merely documented)
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "spotify_api"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Models do not import the API layer"
+type = "forbidden"
+source_modules = ["spotify_api.models"]
+forbidden_modules = ["spotify_api.api"]
+
+[[tool.importlinter.contracts]]
+name = "Jobs do not import the API layer"
+type = "forbidden"
+source_modules = ["spotify_api.jobs"]
+forbidden_modules = ["spotify_api.api"]
+
+[[tool.importlinter.contracts]]
+name = "keyring_client is spoken to from four places"
+type = "forbidden"
+source_modules = [
+    "spotify_api.api.asynchrony",
+    "spotify_api.api.errors",
+    "spotify_api.api.middleware",
+    "spotify_api.api.router",
+    "spotify_api.api.routes",
+    "spotify_api.models",
+    "spotify_api.jobs",
+    "spotify_api.spotify",
+    "spotify_api.context",
+    "spotify_api.errors",
+    "spotify_api.logging",
+    "spotify_api.__main__",
+]
+forbidden_modules = ["keyring_client"]
+# Left off the list, each with a reason:
+#   spotify_api.config            -- validates the service token and audience with keyring's rules
+#   spotify_api.app               -- composition root: builds JwksClient and TokenVerifier
+#   spotify_api.api.dependencies  -- the auth dependency that verifies the caller's token
+#   spotify_api.credentials       -- the adapter that asks keyring for headers and probes JWKS
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "httpx stays out of the API and models layers"
+type = "forbidden"
+source_modules = ["spotify_api.api", "spotify_api.models"]
+forbidden_modules = ["httpx"]
+# The composition root (app.py), the credentials adapter and the Spotify client are
+# the three places that open sockets. Routes depend on protocols, not on httpx.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Talking to settings-api stays behind the preferences module"
+type = "forbidden"
+source_modules = [
+    "spotify_api.api",
+    "spotify_api.models",
+    "spotify_api.jobs",
+    "spotify_api.spotify",
+    "spotify_api.credentials",
+    "spotify_api.context",
+    "spotify_api.errors",
+    "spotify_api.logging",
+    "spotify_api.__main__",
+    "spotify_api.config",
+    "spotify_api.app",
+]
+forbidden_modules = ["settings_client"]
+# Left off the list:
+#   spotify_api.preferences -- the one module that reads settings-api
+# config validates the service token with keyring_client.check_service_token rather
+# than importing this client to do it. The composition root constructs the source
+# through build_preference_source, which is the intended path.
+allow_indirect_imports = true
+
+[tool.uv.sources]
+keyring-client = { path = "../Keyring-api/clients/python", editable = true }
+settings-client = { path = "../Settings-api/clients/python", editable = true }
 

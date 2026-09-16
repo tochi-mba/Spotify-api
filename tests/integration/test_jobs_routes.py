@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from spotify_api.errors import NoActiveDeviceError
+from tests.factories import problem_type
 
 if TYPE_CHECKING:
     import httpx
@@ -91,14 +94,15 @@ async def test_an_unexpected_failure_does_not_leak_its_detail(
     assert "connection pool corrupted" not in (await client.get(accepted["poll_url"])).text
 
 
-async def test_an_unknown_job_is_a_404_with_the_error_envelope(
+async def test_an_unknown_job_is_a_404_problem(
     client: httpx.AsyncClient,
 ) -> None:
     response = await client.get("/v1/jobs/does-not-exist")
 
     assert response.status_code == 404
-    error = response.json()["error"]
-    assert error["type"] == "job_not_found"
+    problem = response.json()
+    assert problem["type"] == problem_type("job-not-found")
+    assert problem["instance"] == "/v1/jobs/does-not-exist"
 
 
 async def test_jobs_can_be_listed(client: httpx.AsyncClient) -> None:
@@ -129,7 +133,8 @@ async def test_listing_can_be_filtered_and_limited(client: httpx.AsyncClient) ->
 async def test_an_invalid_status_filter_is_rejected(client: httpx.AsyncClient) -> None:
     response = await client.get("/v1/jobs?status=nonsense")
     assert response.status_code == 422
-    assert response.json()["error"]["type"] == "validation_error"
+    assert response.json()["type"] == problem_type("validation-failed")
+    assert response.json()["errors"][0]["location"] == "query.status"
 
 
 async def test_a_running_job_can_be_cancelled(
@@ -189,3 +194,59 @@ async def test_an_async_call_still_requires_a_user_token(
 ) -> None:
     response = await anonymous_client.post("/v1/lookup?async=true", json={"items": [{"name": "x"}]})
     assert response.status_code == 401
+
+
+# -- a job belongs to the person who started it -------------------------------
+
+
+async def test_another_account_cannot_read_a_job(
+    client: httpx.AsyncClient, other_client: httpx.AsyncClient
+) -> None:
+    accepted = await submit(client)
+    await settle()
+
+    response = await other_client.get(accepted["poll_url"])
+
+    # Identical to a job that never existed, so the answer confirms nothing about anybody.
+    assert response.status_code == 404
+    assert response.json()["type"] == problem_type("job-not-found")
+
+
+async def test_another_account_cannot_cancel_a_job(
+    client: httpx.AsyncClient, other_client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    release = asyncio.Event()
+    resolver.gate = release
+    accepted = await submit(client)
+    await settle()
+
+    response = await other_client.delete(accepted["poll_url"])
+
+    assert response.status_code == 404
+    assert (await client.get(accepted["poll_url"])).json()["status"] == "running"
+    release.set()
+    await settle()
+
+
+async def test_listing_shows_only_the_callers_own_jobs(
+    client: httpx.AsyncClient, other_client: httpx.AsyncClient
+) -> None:
+    await submit(client)
+    await submit(client)
+    await submit(other_client)
+    await settle()
+
+    assert (await client.get("/v1/jobs")).json()["count"] == 2
+    assert (await other_client.get("/v1/jobs")).json()["count"] == 1
+
+
+@pytest.mark.parametrize(
+    ("method", "path"), [("GET", "/v1/jobs"), ("GET", "/v1/jobs/any"), ("DELETE", "/v1/jobs/any")]
+)
+async def test_the_jobs_routes_require_a_user_token(
+    anonymous_client: httpx.AsyncClient, method: str, path: str
+) -> None:
+    response = await anonymous_client.request(method, path)
+
+    assert response.status_code == 401
+    assert response.json()["type"] == problem_type("user-token-rejected")

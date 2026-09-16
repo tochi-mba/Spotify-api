@@ -22,7 +22,9 @@ from spotify_api.models.responses import LookupStatus
 from spotify_api.spotify.resolver import SpotifyTrackResolver
 from tests.factories import make_settings
 
-CONTEXT = UserContext(user_token=SecretStr("user-token"), profile="personal")
+CONTEXT = UserContext(
+    account_id="account-a", user_token=SecretStr("user-token"), profile="personal"
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -205,9 +207,10 @@ async def test_the_request_market_wins_over_the_configured_default(
 
     resolver = build_resolver(MarketSpy(), default_market="US")
     await resolver.resolve(context=CONTEXT, items=[LookupItem(name="x")], market="GB")
+    await resolver.resolve(context=CONTEXT, items=[LookupItem(name="x")], default_market="US")
     await resolver.resolve(context=CONTEXT, items=[LookupItem(name="x")])
 
-    assert seen == ["GB", "US"]
+    assert seen == ["GB", "US", None]
 
 
 async def test_health_is_delegated_to_the_client(build_resolver: Any) -> None:

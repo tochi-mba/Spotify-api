@@ -14,7 +14,6 @@ far faster than resolving serially.
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING, Any
 
 from spotify_api.errors import (
@@ -23,6 +22,7 @@ from spotify_api.errors import (
     ServiceError,
     UserTokenRejectedError,
 )
+from spotify_api.logging import get_logger
 from spotify_api.models.responses import LookupResult, LookupStatus
 from spotify_api.spotify.mappers import to_track
 
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 __all__ = ["SpotifyTrackResolver"]
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 #: Shown to callers when something we did not anticipate goes wrong. Internal
 #: failure detail stays in the logs, where it belongs.
@@ -62,17 +62,26 @@ class SpotifyTrackResolver:
         self._settings = settings
 
     async def resolve(
-        self, items: Sequence[LookupItem], *, context: UserContext, market: str | None = None
+        self,
+        items: Sequence[LookupItem],
+        *,
+        context: UserContext,
+        market: str | None = None,
+        default_market: str | None = None,
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order.
 
         Never raises on behalf of an individual item: an item that cannot be
         resolved comes back with ``status="error"`` and a message.
+
+        ``market`` is the request's own value. When it is omitted, ``default_market``
+        is used -- the person's setting, passed in by the request path rather than
+        read from process-wide configuration.
         """
         if not items:
             return []
 
-        effective_market = market if market is not None else self._settings.default_market
+        effective_market = market if market is not None else default_market
         semaphore = asyncio.Semaphore(self._settings.max_concurrency)
 
         async def resolve_one(index: int, item: LookupItem) -> LookupResult:
@@ -98,14 +107,14 @@ class SpotifyTrackResolver:
         except _REQUEST_LEVEL_FAILURES:
             raise
         except ServiceError as exc:
-            _logger.warning(
-                "item lookup failed", extra={"item_index": index, "reason": exc.error_type}
-            )
+            _logger.warning("item_lookup_failed", item_index=index, reason=exc.error_type)
             return LookupResult(
                 index=index, query=item, status=LookupStatus.ERROR, error=exc.message
             )
-        except Exception:
-            _logger.exception("unexpected failure resolving item", extra={"item_index": index})
+        except Exception as exc:
+            _logger.exception(
+                "item_lookup_failed_unexpectedly", item_index=index, error_type=type(exc).__name__
+            )
             return LookupResult(
                 index=index, query=item, status=LookupStatus.ERROR, error=_OPAQUE_ERROR
             )

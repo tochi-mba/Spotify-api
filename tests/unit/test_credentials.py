@@ -16,7 +16,7 @@ from spotify_api.errors import (
     KeyringUnavailableError,
     UserTokenRejectedError,
 )
-from tests.factories import make_settings
+from tests.factories import TEST_SERVICE_TOKEN, make_settings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -109,7 +109,7 @@ async def test_it_presents_both_its_own_token_and_the_users(
     await provider.resolve(user_token=USER_TOKEN, profile=PROFILE)
 
     request = calls[0]
-    assert request.headers["Authorization"] == "Bearer test-service-token"
+    assert request.headers["Authorization"] == f"Bearer {TEST_SERVICE_TOKEN}"
     assert request.headers["X-Keyring-User-Token"] == USER_TOKEN
 
 
@@ -330,6 +330,18 @@ async def test_check_health_never_raises(build_provider: Any) -> None:
         raise httpx.ConnectError("no route")
 
     assert await build_provider(boom).check_health() is False
+
+
+async def test_check_health_probes_the_published_keys_not_keyrings_own_health(
+    build_provider: Any, calls: list[httpx.Request]
+) -> None:
+    # keyring's /healthy answers 503 whenever any stored connection anywhere is unusable, so
+    # probing it would take this service out of rotation over one person's expired grant.
+    # The key document is what this service needs from keyring before it can serve anybody.
+    provider = build_provider(always(httpx.Response(200, json={"keys": []})))
+
+    assert await provider.check_health() is True
+    assert calls[0].url.path == "/.well-known/jwks.json"
 
 
 async def test_an_unparseable_expiry_falls_back_to_the_default_ttl(

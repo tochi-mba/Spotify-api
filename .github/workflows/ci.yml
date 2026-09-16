@@ -10,29 +10,31 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# No workflow-level environment, on purpose. The suite builds its own settings and fakes
+# keyring and Spotify at the transport; a variable exported here once leaked into a defaults
+# test and turned it red in CI and nowhere else.
+
 env:
-  # The suite is hermetic -- Spotify is faked at the transport -- but settings
-  # still parse at import, and credentials are required by design.
-  KEYRING_BASE_URL: http://keyring.invalid
-  KEYRING_SERVICE_TOKEN: ci-dummy-service-token
-  ENVIRONMENT: test
+  UV_FROZEN: "1"
 
 jobs:
-  lint:
-    name: Lint and types
+  quality:
+    name: Lint, types, architecture
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras
-      - name: ruff check
-        run: uv run ruff check --output-format=github .
-      - name: ruff format
+      - run: uv sync --group dev
+      - name: Format
         run: uv run ruff format --check .
-      - name: mypy --strict
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+      - name: Types
         run: uv run mypy
+      - name: Architecture contracts
+        run: uv run lint-imports
 
   test:
     name: Tests (Python ${{ matrix.python-version }})
@@ -46,9 +48,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras --python ${{ matrix.python-version }}
-      - name: pytest with a 100% coverage gate
-        run: uv run pytest
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --group dev --python ${{ matrix.python-version }}
+      - name: Tests with a 100% coverage gate
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,13 +69,13 @@ jobs:
         run: docker build -t spotify-api:ci .
       - name: Boot it and check /healthy
         run: |
-          docker run -d --name probe -p 8000:8000 \
-            -e KEYRING_BASE_URL=http://keyring.invalid \
-            -e KEYRING_SERVICE_TOKEN=ci-dummy \
+          docker run -d --name probe -p 8007:8007 \
+            -e SPOTIFY_API_KEYRING_BASE_URL=http://keyring.invalid \
+            -e SPOTIFY_API_KEYRING_SERVICE_TOKEN=ci-dummy-service-token-0123456789abcdef \
             spotify-api:ci
           for _ in $(seq 1 30); do
-            curl -sf localhost:8000/healthy && break
+            curl -sf localhost:8007/healthy && break
             sleep 1
           done
-          curl -sf localhost:8000/healthy | grep -q '"status":"ok"'
+          curl -sf localhost:8007/healthy | grep -q '"status":"ok"'
           docker rm -f probe

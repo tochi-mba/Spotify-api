@@ -44,11 +44,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1
 
 USER app
-EXPOSE 8000
+EXPOSE 8007
 
 # Liveness only. /ready would mark the container unhealthy whenever Spotify is
 # having a bad afternoon, and a container healthcheck should not mean that.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -fsS http://localhost:8000/healthy || exit 1
+    CMD curl -fsS http://localhost:8007/healthy || exit 1
 
 CMD ["python", "-m", "spotify_api"]

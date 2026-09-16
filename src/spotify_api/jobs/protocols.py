@@ -18,16 +18,22 @@ __all__ = ["JobStore"]
 class JobStore(Protocol):
     """Holds jobs and their outcomes."""
 
-    async def create(self, *, operation: str) -> Job:
-        """Record a new pending job and return it."""
+    async def create(self, *, operation: str, account_id: str) -> Job:
+        """Record a new pending job for ``account_id`` and return it."""
         ...
 
-    async def get(self, job_id: str) -> Job:
-        """Return one job, raising if it is unknown or expired."""
+    async def get(self, job_id: str, *, account_id: str) -> Job:
+        """Return one of ``account_id``'s jobs.
+
+        Raises ``JobNotFoundError`` alike for an unknown job, an expired one, and one that
+        belongs to another account.
+        """
         ...
 
-    async def list(self, *, status: JobStatus | None = None, limit: int = 50) -> list[Job]:
-        """Return jobs, newest first."""
+    async def list(
+        self, *, account_id: str, status: JobStatus | None = None, limit: int = 50
+    ) -> list[Job]:
+        """Return ``account_id``'s jobs, newest first."""
         ...
 
     async def start(self, job_id: str) -> None:

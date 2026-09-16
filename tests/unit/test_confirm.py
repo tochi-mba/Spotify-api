@@ -27,7 +27,7 @@ from tests.factories import make_settings
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-CONTEXT = UserContext(user_token=SecretStr("t"), profile="personal")
+CONTEXT = UserContext(account_id="account-a", user_token=SecretStr("t"), profile="personal")
 
 TRACK = "spotify:track:7tFiyTwD0nx5a1eklYtX2J"
 OTHER = "spotify:track:0000000000000000000000"
@@ -157,6 +157,19 @@ async def test_it_keeps_polling_until_the_effect_appears() -> None:
 
     assert player.calls == 3
     assert sleeper.slept == [0.5, 0.5]
+
+
+async def test_an_explicit_timeout_is_used_instead_of_the_configured_one() -> None:
+    player = FakePlayer(state(is_playing=False))
+    confirmer, _ = build_confirmer(
+        player, confirm_timeout_seconds=10, confirm_poll_interval_seconds=0.5
+    )
+
+    with pytest.raises(ConfirmationTimeoutError) as excinfo:
+        await confirmer.confirm(playing_uri(TRACK), context=CONTEXT, timeout_seconds=1)
+
+    assert "1s" in excinfo.value.message
+    assert "10s" not in excinfo.value.message
 
 
 async def test_it_gives_up_after_the_timeout_and_says_what_it_saw() -> None:

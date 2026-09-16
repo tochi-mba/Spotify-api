@@ -22,6 +22,7 @@ from spotify_api.api.dependencies import (
     ConfirmerDep,
     JobRunnerDep,
     PlayerDep,
+    PreferencesDep,
     UserContextDep,
 )
 from spotify_api.models.player import (
@@ -33,7 +34,7 @@ from spotify_api.models.player import (
     TransferRequest,
     VolumeRequest,
 )
-from spotify_api.models.responses import ErrorResponse
+from spotify_api.models.responses import Problem
 from spotify_api.models.spotify.player import (
     Devices,
     PlaybackState,
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
 
     from spotify_api.credentials.models import UserContext
     from spotify_api.jobs.confirm import PlaybackConfirmer, Predicate
+    from spotify_api.preferences import Preferences
 
 __all__ = ["router"]
 
@@ -59,19 +61,19 @@ MarketQuery = Annotated[
 _COMMAND_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_202_ACCEPTED: {"description": "Accepted for background execution (`?async=true`)."},
     status.HTTP_401_UNAUTHORIZED: {
-        "model": ErrorResponse,
+        "model": Problem,
         "description": "The keyring user token is missing or refused.",
     },
     status.HTTP_403_FORBIDDEN: {
-        "model": ErrorResponse,
+        "model": Problem,
         "description": "Spotify Premium is required for playback control.",
     },
     status.HTTP_409_CONFLICT: {
-        "model": ErrorResponse,
+        "model": Problem,
         "description": "No active device. List /v1/player/devices and name one.",
     },
     status.HTTP_504_GATEWAY_TIMEOUT: {
-        "model": ErrorResponse,
+        "model": Problem,
         "description": (
             "Spotify accepted the command but its effect could not be confirmed. "
             "The last observed player state is in `details.observed`."
@@ -88,19 +90,31 @@ async def _command(
     context: UserContext,
     runner: JobRunnerDep,
     run_async: bool,
+    preferences: Preferences,
 ) -> PlaybackState | JSONResponse:
     """Issue a player command and answer with the state that confirms it.
 
     The command and its confirmation are one unit of work, which is what lets
-    the same coroutine serve both the synchronous and the background path.
+    the same coroutine serve both the synchronous and the background path. The
+    confirm timeout is captured here, so a running job does not change timeout
+    mid-flight if the person later changes the setting.
     """
+    timeout_seconds = preferences.confirm_timeout_seconds
 
     async def work() -> PlaybackState:
         predicate = await issue()
-        observed = await confirmer.confirm(predicate, context=context)
+        observed = await confirmer.confirm(
+            predicate, context=context, timeout_seconds=timeout_seconds
+        )
         return PlaybackState.model_validate(observed)
 
-    return await run_or_submit(run_async=run_async, operation=operation, work=work, runner=runner)
+    return await run_or_submit(
+        run_async=run_async,
+        operation=operation,
+        account_id=context.account_id,
+        work=work,
+        runner=runner,
+    )
 
 
 # -- reads ------------------------------------------------------------------
@@ -193,6 +207,7 @@ async def play(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -211,6 +226,7 @@ async def play(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -224,6 +240,7 @@ async def pause(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     device_id: Annotated[str | None, Query(description="Device to pause.")] = None,
     run_async: AsyncFlag = False,
@@ -236,6 +253,7 @@ async def pause(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -253,6 +271,7 @@ async def next_track(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     device_id: Annotated[str | None, Query(description="Device to skip on.")] = None,
     run_async: AsyncFlag = False,
@@ -265,6 +284,7 @@ async def next_track(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -278,6 +298,7 @@ async def previous_track(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     device_id: Annotated[str | None, Query(description="Device to skip on.")] = None,
     run_async: AsyncFlag = False,
@@ -290,6 +311,7 @@ async def previous_track(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -304,6 +326,7 @@ async def seek(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -317,6 +340,7 @@ async def seek(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -331,6 +355,7 @@ async def set_volume(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -346,6 +371,7 @@ async def set_volume(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -360,6 +386,7 @@ async def set_shuffle(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -373,6 +400,7 @@ async def set_shuffle(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -387,6 +415,7 @@ async def set_repeat(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -400,6 +429,7 @@ async def set_repeat(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -415,6 +445,7 @@ async def transfer(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -428,6 +459,7 @@ async def transfer(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )
 
 
@@ -447,6 +479,7 @@ async def add_to_queue(
     player: PlayerDep,
     context: UserContextDep,
     confirmer: ConfirmerDep,
+    preferences: PreferencesDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
@@ -460,4 +493,5 @@ async def add_to_queue(
         context=context,
         runner=runner,
         run_async=run_async,
+        preferences=preferences,
     )

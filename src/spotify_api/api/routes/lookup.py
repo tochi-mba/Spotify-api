@@ -8,14 +8,14 @@ from fastapi.responses import JSONResponse
 from spotify_api.api.asynchrony import AsyncFlag, run_or_submit
 from spotify_api.api.dependencies import (
     JobRunnerDep,
+    PreferencesDep,
     ResolverDep,
-    SettingsDep,
     UserContextDep,
 )
+from spotify_api.context import get_request_id, new_request_id
 from spotify_api.errors import BatchTooLargeError
-from spotify_api.logging import current_request_id
 from spotify_api.models.requests import LookupRequest
-from spotify_api.models.responses import ErrorResponse, LookupResponse
+from spotify_api.models.responses import LookupResponse, Problem
 
 __all__ = ["router"]
 
@@ -42,19 +42,19 @@ router = APIRouter(tags=["lookup"])
             "description": "Accepted for background execution (`?async=true`).",
         },
         status.HTTP_401_UNAUTHORIZED: {
-            "model": ErrorResponse,
+            "model": Problem,
             "description": "The keyring user token is missing or was refused.",
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
-            "model": ErrorResponse,
-            "description": "The request body is invalid.",
+            "model": Problem,
+            "description": "The body is invalid, or the batch is over this person's cap.",
         },
         status.HTTP_502_BAD_GATEWAY: {
-            "model": ErrorResponse,
+            "model": Problem,
             "description": "keyring has no usable Spotify credential for this profile.",
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "model": ErrorResponse,
+            "model": Problem,
             "description": "Spotify or keyring is unreachable.",
         },
     },
@@ -62,7 +62,7 @@ router = APIRouter(tags=["lookup"])
 async def lookup(
     payload: LookupRequest,
     resolver: ResolverDep,
-    settings: SettingsDep,
+    preferences: PreferencesDep,
     context: UserContextDep,
     runner: JobRunnerDep,
     run_async: AsyncFlag = False,
@@ -70,21 +70,34 @@ async def lookup(
     """Resolve every submitted item and return one result per item.
 
     The schema caps batches at an absolute ceiling; this is the *operational*
-    cap, which is configurable per deployment and so cannot live in the model.
+    cap, which is per person (inside this deployment's ceiling) and so cannot
+    live in the model.
     """
-    if len(payload.items) > settings.max_batch_size:
+    if len(payload.items) > preferences.max_batch_size:
         message = (
-            f"a batch may contain at most {settings.max_batch_size} items, "
+            f"a batch may contain at most {preferences.max_batch_size} items, "
             f"and this one has {len(payload.items)}"
         )
         raise BatchTooLargeError(
-            message, limit=settings.max_batch_size, received=len(payload.items)
+            message, limit=preferences.max_batch_size, received=len(payload.items)
         )
 
-    request_id = current_request_id()
+    # Always bound: the context middleware wraps every route. The fallback keeps the type honest.
+    request_id = get_request_id() or new_request_id()
 
     async def work() -> LookupResponse:
-        results = await resolver.resolve(payload.items, market=payload.market, context=context)
+        results = await resolver.resolve(
+            payload.items,
+            market=payload.market,
+            default_market=preferences.default_market,
+            context=context,
+        )
         return LookupResponse(request_id=request_id, results=results)
 
-    return await run_or_submit(run_async=run_async, operation="lookup", work=work, runner=runner)
+    return await run_or_submit(
+        run_async=run_async,
+        operation="lookup",
+        account_id=context.account_id,
+        work=work,
+        runner=runner,
+    )

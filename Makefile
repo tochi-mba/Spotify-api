@@ -1,38 +1,46 @@
-.PHONY: help install test cov lint format typecheck check run live clean
+.DEFAULT_GOAL := help
+UV ?= uv
 
-help:  ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+.PHONY: help install fmt lint type imports test test-live cov check run docker clean
 
-install:  ## Install the project and dev dependencies
-	uv sync --all-extras
+help: ## Show available targets
+	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-test:  ## Run the test suite (100% coverage enforced)
-	uv run pytest
+install: ## Create the virtualenv and install everything
+	$(UV) sync --group dev
 
-cov:  ## Run the suite and write an HTML coverage report
-	uv run pytest --cov-report=html
-	@echo "open htmlcov/index.html"
+fmt: ## Format the codebase
+	$(UV) run ruff format .
+	$(UV) run ruff check --fix .
 
-lint:  ## Check formatting and lint rules
-	uv run ruff check .
-	uv run ruff format --check .
+lint: ## Lint (no fixes)
+	$(UV) run ruff format --check .
+	$(UV) run ruff check .
 
-format:  ## Apply formatting and safe lint fixes
-	uv run ruff check --fix .
-	uv run ruff format .
+type: ## Strict type check
+	$(UV) run mypy
 
-typecheck:  ## Run mypy in strict mode
-	uv run mypy
+imports: ## Enforce the architectural layering contracts
+	$(UV) run lint-imports
 
-check: lint typecheck test  ## Everything CI runs
+test: ## Run the test suite with 100% branch coverage enforced
+	$(UV) run pytest --cov --cov-report=term-missing
 
-run:  ## Start the service
-	uv run python -m spotify_api
+test-live: ## Run the real Spotify Web API tests (needs credentials)
+	$(UV) run pytest -m live --no-cov
 
-live:  ## Run the live tests against the real Spotify API
-	uv run pytest -m live
+cov: ## Write an HTML coverage report to htmlcov/
+	$(UV) run pytest --cov --cov-report=html
 
-clean:  ## Remove caches and build artefacts
-	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov coverage.xml .coverage dist build
-	find . -type d -name __pycache__ -not -path "./.venv/*" -exec rm -rf {} +
+check: lint type imports test ## Everything CI runs
+
+run: ## Serve the API on :8007 with reload
+	$(UV) run uvicorn spotify_api.app:create_app --factory --reload --port 8007
+
+docker: ## Build the container image
+	docker build -t spotify-api:local .
+
+clean: ## Remove caches and build output
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .hypothesis htmlcov .coverage coverage.xml build dist
+	find . -name '__pycache__' -type d -prune -exec rm -rf {} +

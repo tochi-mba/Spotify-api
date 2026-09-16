@@ -15,11 +15,14 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
-import logging
 import time
 from typing import TYPE_CHECKING, Any
 
 import httpx
+
+# Credentials package: the adapter that talks to keyring over HTTP. JWKS_PATH is the
+# readiness probe, because keyring's own /healthy fails closed on any one person's grant.
+from keyring_client import JWKS_PATH
 
 from spotify_api.credentials.models import ResolvedCredential
 from spotify_api.errors import (
@@ -27,6 +30,7 @@ from spotify_api.errors import (
     KeyringUnavailableError,
     UserTokenRejectedError,
 )
+from spotify_api.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,7 +39,7 @@ if TYPE_CHECKING:
 
 __all__ = ["KeyringCredentialProvider"]
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 _UNAUTHORIZED = 401
 _FORBIDDEN = 403
@@ -101,14 +105,21 @@ class KeyringCredentialProvider:
         self._cache.pop(self._key(user_token=user_token, profile=profile), None)
 
     async def check_health(self) -> bool:
-        """Whether keyring is answering. Never raises."""
+        """Whether keyring's published keys are reachable. Never raises.
+
+        The key document rather than keyring's own ``/healthy``, deliberately: that endpoint
+        answers 503 whenever any one stored connection anywhere has stopped working, so probing
+        it would take this service out of rotation over one person's expired grant. The keys
+        are what this service needs from keyring before it can serve anybody.
+        """
         try:
             response = await self._client.get(
-                f"{self._settings.keyring_base_url}/healthz",
+                f"{self._settings.keyring_base_url}{JWKS_PATH}",
                 timeout=self._settings.keyring_timeout_seconds,
             )
-        except httpx.HTTPError:
-            _logger.warning("keyring readiness check failed", exc_info=True)
+        except httpx.HTTPError as exc:
+            # The type only: the exception's text carries keyring's URL.
+            _logger.warning("keyring_readiness_check_failed", error=type(exc).__name__)
             return False
         return response.is_success
 
@@ -146,8 +157,11 @@ class KeyringCredentialProvider:
                 timeout=self._settings.keyring_timeout_seconds,
             )
         except httpx.HTTPError as exc:
+            # The type only, and never into the error: the exception's text carries the URL,
+            # which names the profile being read.
+            _logger.warning("keyring_unreachable", error=type(exc).__name__)
             message = "the keyring credentials service is unreachable"
-            raise KeyringUnavailableError(message, cause=str(exc)) from exc
+            raise KeyringUnavailableError(message) from exc
 
         self._raise_for_status(response)
         return self._parse(response)
@@ -158,7 +172,7 @@ class KeyringCredentialProvider:
         status = response.status_code
         if status in (_UNAUTHORIZED, _FORBIDDEN):
             message = "keyring refused the user token"
-            raise UserTokenRejectedError(message, status_code=status)
+            raise UserTokenRejectedError(message, upstream_status=status)
 
         if status == _NOT_FOUND:
             message = "this profile is not connected to Spotify in keyring"
@@ -169,11 +183,11 @@ class KeyringCredentialProvider:
                 "keyring could not produce a usable Spotify credential -- the grant may "
                 "have been revoked, or a refresh failed. Reconnect Spotify in keyring."
             )
-            raise CredentialUnavailableError(message, detail=_detail(response))
+            raise CredentialUnavailableError(message, upstream_detail=_detail(response))
 
         if not response.is_success:
             message = "the keyring credentials service is failing"
-            raise KeyringUnavailableError(message, status_code=status)
+            raise KeyringUnavailableError(message, upstream_status=status)
 
     def _parse(self, response: httpx.Response) -> tuple[ResolvedCredential, float]:
         """Read the credential and work out how long it may be cached."""
@@ -206,7 +220,7 @@ class KeyringCredentialProvider:
         try:
             moment = dt.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
         except ValueError:
-            _logger.warning("could not parse keyring expires_at", extra={"raw": expires_at})
+            _logger.warning("keyring_expires_at_unparseable", raw=expires_at)
             return default
 
         remaining = (moment - dt.datetime.now(tz=dt.UTC)).total_seconds()

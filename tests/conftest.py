@@ -21,6 +21,11 @@ def load_fixture(name: str) -> dict[str, Any]:
     return payload
 
 
+def log_records(out: str) -> list[dict[str, Any]]:
+    """Every JSON log record in captured output, parsed. Anything else on stdout is skipped."""
+    return [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+
+
 @pytest.fixture
 def search_found() -> dict[str, Any]:
     """A search response containing exactly one track."""

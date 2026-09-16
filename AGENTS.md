@@ -1,8 +1,9 @@
 # AGENTS.md
 
 Operating manual for anyone — human or agent — changing this repository.
-Read this before your first commit here. It is normative: where it says
-**must**, CI enforces it.
+Read this before your first commit here. It is the single source of truth
+for how work is done here; `CLAUDE.md` just points at it. It is normative:
+where it says **must**, CI enforces it.
 
 ---
 
@@ -15,7 +16,7 @@ and receives one result per item, in order, each with its own status.
 It is intentionally small and does one thing. Resist the urge to grow it into a
 general Spotify proxy.
 
-## 2. The three invariants
+## 2. The four invariants
 
 Break any of these and the change is wrong, however well it is written.
 
@@ -25,15 +26,26 @@ as a result with `status="error"`. A new failure mode means a new branch there,
 never an exception escaping to the route.
 
 **2.2 — Spotify stays behind the seam.** Only `src/spotify_api/spotify/` may
-import `httpx`, know a Spotify URL, or understand Spotify's JSON. Routes depend
-on the `TrackResolver` protocol in `spotify/protocols.py`. If you find yourself
-importing `SpotifyClient` into a route, stop and reconsider.
+know a Spotify URL or understand Spotify's JSON. Routes depend on the
+`TrackResolver` protocol in `spotify/protocols.py`. `httpx` is also forbidden
+from `api/` and `models/` (enforced by import-linter); the composition root,
+the credentials adapter and the Spotify client are the three places that open
+sockets. If you find yourself importing `SpotifyClient` into a route, stop.
 
 **2.3 — The contract lives in the models.** Every rule a caller must satisfy
 belongs in `models/requests.py`, not in a handler. That way it is enforced once
 and published automatically in the OpenAPI schema. The single exception is the
 *operational* batch cap, which is per-deployment configuration and so is checked
 in the handler.
+
+**2.4 — Identity is verified, and state is scoped by it.** Every request's
+`Authorization: Bearer` token is verified locally in
+`api/dependencies.get_user_context` with `keyring_client` — RS256, issuer and
+audience pinned, expiry checked — before any work starts, and
+`UserContext.account_id` is the verified `sub`. The legacy `X-Keyring-User-Token`
+header is still accepted for one release. Nothing that stores state may be read
+without that account: a job belongs to whoever started it, and another account's
+job is a 404 identical to an unknown one.
 
 ## 3. Test-driven development is mandatory
 
@@ -61,13 +73,14 @@ asked the awkward question.
 
 ## 4. The gate
 
-All four must pass. CI runs exactly this.
+All five must pass. CI runs exactly this.
 
 ```bash
 make check          # or, individually:
-uv run ruff check .
 uv run ruff format --check .
+uv run ruff check .
 uv run mypy
+uv run lint-imports
 uv run pytest
 ```
 
@@ -81,8 +94,8 @@ Use `make check`, which does not.
 - Never lower `fail_under`. Not temporarily, not "just to unblock".
 - Never add `# pragma: no cover` to dodge the gate. The sanctioned exclusions
   are declared once in `pyproject.toml` (`TYPE_CHECKING` blocks, protocol
-  bodies, `NotImplementedError`, the `__main__` guard) and that list does not
-  grow without a very good reason stated in the commit message.
+  bodies, `@overload`, `NotImplementedError`, the `__main__` guard) and that
+  list does not grow without a very good reason stated in the commit message.
 - An uncovered line is the suite telling you about a case you have not thought
   about. Every gap found while building this was a real one worth a test —
   explicit JSON nulls, a JSON body that is not an object, a token refresh with
@@ -94,19 +107,23 @@ If a line is genuinely unreachable, delete it.
 
 ```
 src/spotify_api/
-├── app.py            create_app() factory; the lifespan owns ONE httpx client
-├── config.py         pydantic-settings; credentials are SecretStr, always
-├── logging.py        JSON logs; request id stamped at record creation
-├── middleware.py     request id in/out, one access log line per request
-├── errors.py         exception hierarchy + the handlers that render it
+├── app.py            create_app() factory; composition root; owns ONE httpx client
+├── config.py         pydantic-settings, SPOTIFY_API_ prefix; unknown names refused
+├── logging.py        structlog; request id, account id, redact_secrets
+├── context.py        request-id and account-id contextvars
+├── errors.py         domain exception hierarchy (no HTTP)
 ├── api/
-│   ├── dependencies.py   DI providers; tests override these
+│   ├── dependencies.py   DI + Bearer verification; tests override these
+│   ├── errors.py         RFC 9457 problem+json handlers
+│   ├── middleware.py     request id in/out, one access log line per request
+│   ├── asynchrony.py     ?async=true
 │   ├── router.py         health at root, everything else under /v1
 │   └── routes/           one module per resource
 ├── models/           the public contract, request and response
+├── credentials/      keyring: the headers to attach for one user, cached to expiry
+├── jobs/             background jobs; each belongs to the account that started it
 └── spotify/          the adapter. Nothing outside here knows Spotify exists.
     ├── protocols.py      the seam routes depend on
-    ├── auth.py           token cache + stampede lock
     ├── client.py         the retry ladder
     ├── query.py          Spotify field filters
     ├── mappers.py        raw JSON -> models, defensively
@@ -178,8 +195,12 @@ means: a field with a `description`, a range constraint if it is numeric, a test
 for its default and its bounds, a row in the README table, and a line in
 `.env.example`.
 
-`SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` are required and have no
-defaults — the service must fail to start rather than run misconfigured.
+`SPOTIFY_API_KEYRING_BASE_URL` and `SPOTIFY_API_KEYRING_SERVICE_TOKEN` are
+required and have no defaults — the service must fail to start rather than run
+misconfigured. Every variable carries the `SPOTIFY_API_` prefix, and a new field
+is recognised by the unknown-variable check automatically. Renaming a variable
+means adding the old name to `LEGACY_NAMES`, so an upgrade that kept it fails
+with the new name in the message instead of silently running on a default.
 
 ## 10. Commits
 
@@ -191,7 +212,7 @@ defaults — the service must fail to start rather than run misconfigured.
 ## 11. Definition of done
 
 - [ ] A failing test was written first.
-- [ ] `make check` passes: ruff, format, mypy `--strict`, pytest at 100%.
+- [ ] `make check` passes: ruff, format, mypy `--strict`, import-linter, pytest at 100%.
 - [ ] `fail_under` untouched; no new `# pragma: no cover`.
 - [ ] New config documented in README and `.env.example`.
 - [ ] New endpoints carry OpenAPI `summary`, `description` and `responses`.

@@ -13,7 +13,6 @@ so a fifteen-second timeout is asserted in microseconds rather than waited out.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import TYPE_CHECKING, Any, TypeAlias
 
@@ -22,6 +21,7 @@ from spotify_api.errors import (
     NoActiveDeviceError,
     ServiceError,
 )
+from spotify_api.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -46,7 +46,7 @@ __all__ = [
     "volume_is",
 ]
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 #: A question asked of the player state: "is what I wanted true yet?"
 Predicate: TypeAlias = "Callable[[dict[str, Any]], bool]"
@@ -165,6 +165,7 @@ class PlaybackConfirmer:
         context: UserContext,
         store: JobStore | None = None,
         job_id: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Poll until ``predicate`` holds, and return the state that satisfied it.
 
@@ -173,6 +174,9 @@ class PlaybackConfirmer:
             context: Whose player to watch.
             store: Job store to record poll attempts against, when running as a job.
             job_id: The job the attempts belong to.
+            timeout_seconds: How long to wait. Captured by the caller at submit so a
+                running job does not change timeout mid-flight. Defaults to this
+                deployment's configured timeout.
 
         Returns:
             The player state in which the predicate first held.
@@ -181,7 +185,10 @@ class PlaybackConfirmer:
             NoActiveDeviceError: Nothing was playing anywhere for the whole wait.
             ConfirmationTimeoutError: The command was accepted but never took effect.
         """
-        deadline = self._clock() + self._settings.confirm_timeout_seconds
+        timeout = (
+            self._settings.confirm_timeout_seconds if timeout_seconds is None else timeout_seconds
+        )
+        deadline = self._clock() + timeout
         interval = self._settings.confirm_poll_interval_seconds
         observed: dict[str, Any] | None = None
         saw_a_device = False
@@ -209,8 +216,7 @@ class PlaybackConfirmer:
             raise NoActiveDeviceError(message)
 
         message = (
-            "the command was accepted but its effect could not be confirmed within "
-            f"{self._settings.confirm_timeout_seconds:g}s"
+            f"the command was accepted but its effect could not be confirmed within {timeout:g}s"
         )
         raise ConfirmationTimeoutError(message, observed=observed)
 
@@ -224,7 +230,7 @@ class PlaybackConfirmer:
         try:
             response = await self._client.request("GET", "/me/player", context=context)
         except ServiceError as exc:
-            _logger.info("player poll failed; still waiting", extra={"reason": exc.error_type})
+            _logger.info("player_poll_failed", reason=exc.error_type)
             return None
         body = response.body
         return body if isinstance(body, dict) else None
