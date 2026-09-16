@@ -8,7 +8,7 @@ uv run spotify-api                         # production entry point
 docker build -t spotify-api:local . && docker run --rm -p 8007:8007 --env-file .env spotify-api:local
 ```
 
-The process binds `0.0.0.0:8007`. There is no `HOST` / `PORT` setting; change the bind in a
+The process binds `SPOTIFY_API_HOST:SPOTIFY_API_PORT`, `127.0.0.1:8007` by default; the image sets the host to `0.0.0.0`. Change the bind in a
 reverse proxy, not here.
 
 `GET /healthy` returns `200` from process state alone. Point a liveness probe at it. It is one
