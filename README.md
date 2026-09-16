@@ -293,7 +293,7 @@ a real signed token, so the suite needs no network and no credentials. See
 ## Docker
 
 ```bash
-docker build -t spotify-api .
+GITHUB_TOKEN="$(gh auth token)" docker build --secret id=github_token,env=GITHUB_TOKEN -t spotify-api .
 docker run --rm -p 8007:8007 --env-file .env spotify-api
 ```
 

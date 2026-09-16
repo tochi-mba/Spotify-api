@@ -7,6 +7,7 @@ on:
 jobs:
   service:
     uses: tochi-mba/LUCY-assistant/.github/workflows/service.yml@v1
+    secrets: inherit
     with:
       # The image refuses to boot without keyring settings; these are not credentials.
       docker-env: |

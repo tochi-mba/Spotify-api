@@ -17,8 +17,16 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 # git: uv fetches the family's client packages from tagged git sources.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+# The token exists only for this RUN, in git's process environment, never a layer.
+# Without a secret, public sources are fetched anonymously.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    --mount=type=secret,id=github_token,required=false \
+    if [ -s /run/secrets/github_token ]; then \
+        export GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:$(cat /run/secrets/github_token)@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/"; \
+    fi \
+    && uv sync --frozen --no-install-project --no-dev
 
 # Only now does the source arrive, so only this cheap layer rebuilds on a code
 # change. README.md comes too because pyproject declares it as the readme and
@@ -27,7 +35,13 @@ COPY README.md ./
 COPY src/ ./src/
 # Not editable: the runtime stage copies the venv alone, so the package has to be in it.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+    --mount=type=secret,id=github_token,required=false \
+    if [ -s /run/secrets/github_token ]; then \
+        export GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="url.https://x-access-token:$(cat /run/secrets/github_token)@github.com/.insteadOf" \
+          GIT_CONFIG_VALUE_0="https://github.com/"; \
+    fi \
+    && uv sync --frozen --no-dev --no-editable
 
 # --- runtime -----------------------------------------------------------------
 FROM python:3.12-slim AS runtime

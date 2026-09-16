@@ -5,7 +5,7 @@
 ```bash
 make run                                   # dev, :8007, reload
 uv run spotify-api                         # production entry point
-docker build -t spotify-api:local . && docker run --rm -p 8007:8007 --env-file .env spotify-api:local
+GITHUB_TOKEN="$(gh auth token)" docker build --secret id=github_token,env=GITHUB_TOKEN -t spotify-api:local . && docker run --rm -p 8007:8007 --env-file .env spotify-api:local
 ```
 
 The process binds `SPOTIFY_API_HOST:SPOTIFY_API_PORT`, `127.0.0.1:8007` by default; the image sets the host to `0.0.0.0`. Change the bind in a

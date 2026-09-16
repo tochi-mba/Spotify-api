@@ -38,8 +38,9 @@ check: lint type imports test ## Everything CI runs
 run: ## Serve the API on :8007 with reload
 	$(UV) run uvicorn spotify_api.app:create_app --factory --reload --port 8007
 
+# Signed-in gh fetches private client packages; with no session git fetches anonymously.
 docker: ## Build the container image
-	docker build -t spotify-api:local .
+	@GITHUB_TOKEN="$$(gh auth token 2>/dev/null)" docker build --secret id=github_token,env=GITHUB_TOKEN -t spotify-api:local .
 
 clean: ## Remove caches and build output
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .hypothesis htmlcov .coverage coverage.xml build dist

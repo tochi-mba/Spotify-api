@@ -20,6 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- CI inherits `FAMILY_GITHUB_TOKEN`; image builds accept a BuildKit `github_token`
+  secret so tagged client packages can be fetched from private family repositories.
+  `make docker` uses the signed-in GitHub account without saving its token in an image.
 - **Breaking:** every environment variable is now prefixed `SPOTIFY_API_`, and
   `SPOTIFY_API_BASE_URL` is now `SPOTIFY_API_SPOTIFY_BASE_URL`. The bare `KEYRING_*` names
   sat inside keyring's own prefix, which keyring refuses, so a host configuring both services
