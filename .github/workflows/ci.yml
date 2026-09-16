@@ -1,81 +1,13 @@
 name: CI
-
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-# No workflow-level environment, on purpose. The suite builds its own settings and fakes
-# keyring and Spotify at the transport; a variable exported here once leaked into a defaults
-# test and turned it red in CI and nowhere else.
-
-env:
-  UV_FROZEN: "1"
-
 jobs:
-  quality:
-    name: Lint, types, architecture
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-      - run: uv sync --group dev
-      - name: Format
-        run: uv run ruff format --check .
-      - name: Lint
-        run: uv run ruff check --output-format=github .
-      - name: Types
-        run: uv run mypy
-      - name: Architecture contracts
-        run: uv run lint-imports
-
-  test:
-    name: Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          python-version: ${{ matrix.python-version }}
-      - run: uv sync --group dev --python ${{ matrix.python-version }}
-      - name: Tests with a 100% coverage gate
-        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.python-version }}
-          path: coverage.xml
-          if-no-files-found: ignore
-
-  docker:
-    name: Docker image
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: docker build -t spotify-api:ci .
-      - name: Boot it and check /healthy
-        run: |
-          docker run -d --name probe -p 8007:8007 \
-            -e SPOTIFY_API_KEYRING_BASE_URL=http://keyring.invalid \
-            -e SPOTIFY_API_KEYRING_SERVICE_TOKEN=ci-dummy-service-token-0123456789abcdef \
-            spotify-api:ci
-          for _ in $(seq 1 30); do
-            curl -sf localhost:8007/healthy && break
-            sleep 1
-          done
-          curl -sf localhost:8007/healthy | grep -q '"status":"ok"'
-          docker rm -f probe
+  service:
+    uses: tochi-mba/LUCY-assistant/.github/workflows/service.yml@v1
+    with:
+      # The image refuses to boot without keyring settings; these are not credentials.
+      docker-env: |
+        SPOTIFY_API_KEYRING_BASE_URL=http://127.0.0.1:8001
+        SPOTIFY_API_KEYRING_SERVICE_TOKEN=ci-dummy-service-token-0123456789abcdef

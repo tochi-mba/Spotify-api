@@ -15,6 +15,8 @@ WORKDIR /app
 # itself, so this layer stays cached until the lockfile actually changes --
 # editing source does not re-resolve or re-download anything.
 COPY pyproject.toml uv.lock ./
+# git: uv fetches the family's client packages from tagged git sources.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
