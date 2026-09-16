@@ -25,8 +25,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # the build backend reads it.
 COPY README.md ./
 COPY src/ ./src/
+# Not editable: the runtime stage copies the venv alone, so the package has to be in it.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --no-editable
 
 # --- runtime -----------------------------------------------------------------
 FROM python:3.12-slim AS runtime
@@ -42,6 +43,7 @@ WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    SPOTIFY_API_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

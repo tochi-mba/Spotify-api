@@ -21,8 +21,8 @@ def main() -> None:
     uvicorn.run(
         "spotify_api.app:create_app",
         factory=True,
-        host="0.0.0.0",  # noqa: S104 -- containers must bind all interfaces
-        port=8000,
+        host=settings.host,
+        port=settings.port,
         log_level=settings.log_level.lower(),
         access_log=False,  # our own middleware emits structured access logs
     )

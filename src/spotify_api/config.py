@@ -158,6 +158,13 @@ class Settings(BaseSettings):
         description="ISO 3166-1 alpha-2 market applied when a request omits one.",
     )
 
+    # --- Serving -------------------------------------------------------------
+    host: str = "127.0.0.1"
+    """Loopback by default, as every sibling: the image sets 0.0.0.0 for its own process."""
+
+    port: Annotated[int, Field(ge=1, le=65535)] = 8007
+    """This service's family port (ADR-0004 in the meta repository)."""
+
     # --- Observability -----------------------------------------------------
     environment: Environment = "development"
     log_level: LogLevel = "INFO"

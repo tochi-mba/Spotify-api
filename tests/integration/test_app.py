@@ -207,6 +207,8 @@ def test_the_module_entrypoint_starts_uvicorn(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setenv("SPOTIFY_API_KEYRING_BASE_URL", "https://keyring.from-env")
     monkeypatch.setenv("SPOTIFY_API_KEYRING_SERVICE_TOKEN", TEST_SERVICE_TOKEN)
+    monkeypatch.setenv("SPOTIFY_API_HOST", "0.0.0.0")  # noqa: S104 - the point of the test
+    monkeypatch.setenv("SPOTIFY_API_PORT", "8107")
     monkeypatch.setattr("uvicorn.run", fake_run)
 
     get_settings.cache_clear()
@@ -217,4 +219,7 @@ def test_the_module_entrypoint_starts_uvicorn(monkeypatch: pytest.MonkeyPatch) -
 
     assert recorded["target"] == "spotify_api.app:create_app"
     assert recorded["kwargs"]["factory"] is True
-    assert recorded["kwargs"]["port"] == 8000
+    # The bind is configuration, not a constant: the family assigns this service 8007 by
+    # default, and a deployment may move it.
+    assert recorded["kwargs"]["host"] == "0.0.0.0"  # noqa: S104 - what the env asked for
+    assert recorded["kwargs"]["port"] == 8107
