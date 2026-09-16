@@ -6,9 +6,9 @@ normative. This file is the short version.
 ## Setup
 
 ```bash
-uv sync --all-extras
+uv sync --group dev
 uv run pre-commit install
-cp .env.example .env     # add credentials only if you want to run `make live`
+cp .env.example .env     # add credentials only if you want to run `make test-live`
 ```
 
 The full test suite needs no credentials and no network.
@@ -18,9 +18,9 @@ The full test suite needs no credentials and no network.
 1. **Write a failing test.** Run it. Confirm it fails for the reason you expect.
 2. Write the smallest code that makes it pass.
 3. Refactor with it green.
-4. `make check` — ruff, format, mypy `--strict`, pytest at 100% branch coverage.
+4. `make check` — ruff, format, mypy `--strict`, import-linter, pytest at 100% branch coverage.
 
-All four must pass before you commit. Beware piping to `tail` in a shell chain:
+All five must pass before you commit. Beware piping to `tail` in a shell chain:
 `tail`'s exit code hides the failure. `make check` does not have that problem.
 
 ## Commits

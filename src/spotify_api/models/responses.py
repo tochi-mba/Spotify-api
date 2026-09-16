@@ -16,17 +16,21 @@ from spotify_api import SERVICE_NAME
 from spotify_api.models.requests import LookupItem
 
 __all__ = [
+    "PROBLEM_CONTENT_TYPE",
     "Album",
     "Artist",
-    "ErrorBody",
-    "ErrorResponse",
+    "FieldError",
     "HealthResponse",
     "LookupResponse",
     "LookupResult",
     "LookupStatus",
+    "Problem",
     "ReadyResponse",
     "Track",
 ]
+
+#: The media type of every error response, as RFC 9457 names it.
+PROBLEM_CONTENT_TYPE = "application/problem+json"
 
 
 class LookupStatus(StrEnum):
@@ -136,18 +140,60 @@ class ReadyResponse(BaseModel):
         )
 
 
-class ErrorBody(BaseModel):
-    """The inner object of the error envelope."""
+class FieldError(BaseModel):
+    """One field-level validation failure.
 
-    type: str = Field(description="Stable, machine-readable error discriminator.")
-    message: str = Field(description="Human-readable explanation.")
-    details: dict[str, object] = Field(
-        default_factory=dict, description="Structured context, when there is any."
+    Where and what, never the offending input: that is the caller's own data, and echoing it
+    would put it into every client log and proxy that records response bodies.
+    """
+
+    location: str = Field(description="Dotted path to the offending field, e.g. body.items.0.name.")
+    message: str = Field(description="What is wrong with it.")
+
+
+class Problem(BaseModel):
+    """Every non-2xx response this service produces, in the shape RFC 9457 defines.
+
+    One shape for every failure, so a client -- or a model calling this as a tool -- has exactly
+    one error format to understand, and it is the one every service in the family uses.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "type": "https://spotify-api.invalid/problems/no-active-device",
+                    "title": "Conflict",
+                    "status": 409,
+                    "detail": (
+                        "no active Spotify device was found; open Spotify on a device, or pass "
+                        "device_id explicitly"
+                    ),
+                    "instance": "/v1/player/play",
+                    "request_id": "0f8c1e2a-4b5d-4e6f-8a9b-0c1d2e3f4a5b",
+                }
+            ]
+        }
     )
-    request_id: str = Field(description="Correlation id for this failure.")
 
-
-class ErrorResponse(BaseModel):
-    """Every non-2xx response this service produces has this shape."""
-
-    error: ErrorBody
+    type: str = Field(
+        description="A URI identifying the problem kind. Its last segment is stable; switch on it."
+    )
+    title: str = Field(description="Short, human-readable summary of the problem kind.")
+    status: int = Field(description="The HTTP status code.")
+    detail: str = Field(description="Explanation specific to this occurrence.")
+    instance: str | None = Field(default=None, description="The path of the request that failed.")
+    request_id: str | None = Field(
+        default=None,
+        description="Correlates this response with the server logs; also the X-Request-ID header.",
+    )
+    errors: list[FieldError] | None = Field(
+        default=None, description="Per-field detail, present only for validation failures."
+    )
+    details: dict[str, object] | None = Field(
+        default=None,
+        description=(
+            "Structured context for this occurrence, when there is any: the last `observed` "
+            "player state of a confirmation that timed out, the `limit` a batch exceeded."
+        ),
+    )

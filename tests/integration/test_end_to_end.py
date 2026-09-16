@@ -14,16 +14,18 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
+from keyring_client import JWKS_PATH
+from keyring_client.testing import ISSUER, jwks, mint
 
 from spotify_api.app import create_app
-from tests.factories import make_settings
+from tests.factories import TEST_SERVICE_TOKEN, make_settings, problem_type, user_token
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 KEYRING_URL = "https://keyring.test"
 SPOTIFY_URL = "https://api.spotify.test/v1"
-USER_TOKEN = "e2e-user-token"
+USER_TOKEN = user_token("e2e-account")
 
 
 class FakeUpstreams:
@@ -34,7 +36,9 @@ class FakeUpstreams:
         self.search_empty = search_empty
         self.keyring_calls: list[httpx.Request] = []
         self.spotify_calls: list[httpx.Request] = []
+        self.jwks_calls: list[httpx.Request] = []
         self.keyring_status = 200
+        self.jwks_status = 200
         self.spotify_status = 200
         self.access_token = "spotify-access-token"
 
@@ -44,11 +48,14 @@ class FakeUpstreams:
         return self._spotify(request)
 
     def _keyring(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == JWKS_PATH:
+            # Counted apart from the credential endpoint: verifying a token and asking for a
+            # credential are different conversations with keyring.
+            self.jwks_calls.append(request)
+            return httpx.Response(self.jwks_status, json=jwks())
         self.keyring_calls.append(request)
         if self.keyring_status != 200:
             return httpx.Response(self.keyring_status, json={"detail": "no"})
-        if request.url.path.endswith("/healthz"):
-            return httpx.Response(200, json={"status": "ok"})
         expires = dt.datetime.now(tz=dt.UTC) + dt.timedelta(hours=1)
         return httpx.Response(
             200,
@@ -76,14 +83,14 @@ def upstreams(search_found: dict[str, Any], search_empty: dict[str, Any]) -> Fak
 
 @pytest.fixture
 async def live_client(upstreams: FakeUpstreams) -> AsyncIterator[httpx.AsyncClient]:
-    settings = make_settings(keyring_base_url=KEYRING_URL, spotify_api_base_url=SPOTIFY_URL)
+    settings = make_settings(keyring_base_url=KEYRING_URL, spotify_base_url=SPOTIFY_URL)
     app = create_app(settings=settings, transport=httpx.MockTransport(upstreams))
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"X-Keyring-User-Token": USER_TOKEN},
+            headers={"Authorization": f"Bearer {USER_TOKEN}"},
         ) as client:
             yield client
 
@@ -126,7 +133,7 @@ async def test_keyring_is_asked_for_the_credential_and_spotify_gets_it(
 
     ask = upstreams.keyring_calls[0]
     assert ask.url.path == "/v1/internal/credentials/personal/spotify"
-    assert ask.headers["Authorization"] == "Bearer test-service-token"
+    assert ask.headers["Authorization"] == f"Bearer {TEST_SERVICE_TOKEN}"
     assert ask.headers["X-Keyring-User-Token"] == USER_TOKEN
 
     # And what keyring returned is what reached Spotify.
@@ -161,13 +168,16 @@ async def test_readiness_uses_the_real_credential_provider(
     response = await live_client.get("/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "dependencies": {"spotify": "ok"}}
-    assert upstreams.keyring_calls
+    # The published keys, not keyring's own /healthy, which answers 503 whenever any one
+    # person's stored connection has stopped working.
+    assert upstreams.jwks_calls
+    assert upstreams.keyring_calls == []
 
 
 async def test_readiness_reports_not_ready_when_keyring_is_down(
     live_client: httpx.AsyncClient, upstreams: FakeUpstreams
 ) -> None:
-    upstreams.keyring_status = 503
+    upstreams.jwks_status = 503
     response = await live_client.get("/ready")
     assert response.status_code == 503
     assert response.json()["dependencies"]["spotify"] == "unavailable"
@@ -180,7 +190,7 @@ async def test_a_refused_user_token_surfaces_as_401(
     response = await live_client.post("/v1/lookup", json={"items": [{"name": "x"}]})
 
     assert response.status_code == 401
-    assert response.json()["error"]["type"] == "user_token_rejected"
+    assert response.json()["type"] == problem_type("user-token-rejected")
 
 
 async def test_a_missing_spotify_connection_surfaces_distinctly(
@@ -190,7 +200,7 @@ async def test_a_missing_spotify_connection_surfaces_distinctly(
     response = await live_client.post("/v1/lookup", json={"items": [{"name": "x"}]})
 
     assert response.status_code == 502
-    assert response.json()["error"]["type"] == "credential_unavailable"
+    assert response.json()["type"] == problem_type("credential-unavailable")
 
 
 async def test_an_upstream_spotify_failure_surfaces_as_a_per_item_error(
@@ -203,3 +213,20 @@ async def test_an_upstream_spotify_failure_surfaces_as_a_per_item_error(
     [result] = response.json()["results"]
     assert result["status"] == "error"
     assert "failing" in result["error"]
+
+
+async def test_a_token_minted_for_another_service_never_reaches_keyring_or_spotify(
+    live_client: httpx.AsyncClient, upstreams: FakeUpstreams
+) -> None:
+    foreign = mint(account_id="e2e-account", audience="web-search-api", issuer=ISSUER)
+
+    response = await live_client.post(
+        "/v1/lookup",
+        json={"items": [{"name": "Bohemian Rhapsody"}]},
+        headers={"Authorization": f"Bearer {foreign}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["type"] == problem_type("user-token-rejected")
+    assert upstreams.keyring_calls == []
+    assert upstreams.spotify_calls == []

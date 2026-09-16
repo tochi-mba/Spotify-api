@@ -50,6 +50,7 @@ async def run_or_submit(
     *,
     run_async: bool,
     operation: str,
+    account_id: str,
     work: Callable[[], Awaitable[T]],
     runner: JobRunner,
 ) -> T | JSONResponse:
@@ -58,6 +59,7 @@ async def run_or_submit(
     Args:
         run_async: The caller's ``?async=`` flag.
         operation: Dotted name recorded on the job, e.g. ``"player.play"``.
+        account_id: The verified account the job belongs to. Only it may read or cancel it.
         work: The coroutine to run. Identical in both modes.
         runner: Where background work is submitted.
 
@@ -67,7 +69,7 @@ async def run_or_submit(
     if not run_async:
         return await work()
 
-    job = await runner.submit(operation=operation, work=work)
+    job = await runner.submit(operation=operation, account_id=account_id, work=work)
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content=JobAccepted.of(job).model_dump(mode="json"),

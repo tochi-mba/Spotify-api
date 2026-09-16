@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 Handler: TypeAlias = "Callable[[httpx.Request], httpx.Response]"
 
 ITEM = LookupItem(name="Bohemian Rhapsody", artist="Queen")
-CONTEXT = UserContext(user_token=SecretStr("user-token"), profile="personal")
+CONTEXT = UserContext(
+    account_id="account-a", user_token=SecretStr("user-token"), profile="personal"
+)
 
 
 class FakeCredentials:
@@ -121,7 +123,7 @@ async def test_it_builds_the_url_from_the_configured_base(
     build_client: Any, requests: list[httpx.Request]
 ) -> None:
     client = build_client(
-        responder(httpx.Response(200, json={})), spotify_api_base_url="https://api.test/v1"
+        responder(httpx.Response(200, json={})), spotify_base_url="https://api.test/v1"
     )
     await client.request("GET", "/me/player", context=CONTEXT)
     assert str(requests[0].url) == "https://api.test/v1/me/player"

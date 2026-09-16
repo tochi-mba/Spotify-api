@@ -4,9 +4,9 @@ Deselected by default (``-m "not live"`` in pyproject) and skipped outright
 unless the environment names a running keyring and supplies a user token, so a
 contributor without either can still run the full suite::
 
-    export KEYRING_BASE_URL=http://127.0.0.1:8001
-    export KEYRING_SERVICE_TOKEN=...      # this service's token, from keyring
-    export SPOTIFY_LIVE_USER_TOKEN=...    # mint with: POST /v1/auth/service-token
+    export SPOTIFY_API_KEYRING_BASE_URL=http://127.0.0.1:8001
+    export SPOTIFY_API_KEYRING_SERVICE_TOKEN=...  # this service's token, from keyring
+    export SPOTIFY_LIVE_USER_TOKEN=...  # POST /v1/auth/service-token {"audience": "spotify-api"}
     uv run pytest -m live
 
 These are deliberately few and loose. They answer one question -- "do our
@@ -44,8 +44,15 @@ USER_TOKEN = os.getenv("SPOTIFY_LIVE_USER_TOKEN", "")
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(
-        not (os.getenv("KEYRING_BASE_URL") and os.getenv("KEYRING_SERVICE_TOKEN") and USER_TOKEN),
-        reason="KEYRING_BASE_URL, KEYRING_SERVICE_TOKEN and SPOTIFY_LIVE_USER_TOKEN are not set",
+        not (
+            os.getenv("SPOTIFY_API_KEYRING_BASE_URL")
+            and os.getenv("SPOTIFY_API_KEYRING_SERVICE_TOKEN")
+            and USER_TOKEN
+        ),
+        reason=(
+            "SPOTIFY_API_KEYRING_BASE_URL, SPOTIFY_API_KEYRING_SERVICE_TOKEN and "
+            "SPOTIFY_LIVE_USER_TOKEN are not set"
+        ),
     ),
 ]
 
@@ -57,7 +64,13 @@ def settings() -> Settings:
 
 @pytest.fixture
 def context(settings: Settings) -> UserContext:
-    return UserContext(user_token=SecretStr(USER_TOKEN), profile=settings.keyring_default_profile)
+    # The provider is driven directly here, below the route that would have verified the token,
+    # so the account id is a label rather than a verified claim.
+    return UserContext(
+        account_id="live-test-account",
+        user_token=SecretStr(USER_TOKEN),
+        profile=settings.keyring_default_profile,
+    )
 
 
 @pytest.fixture
@@ -136,7 +149,7 @@ async def test_lookup_end_to_end_through_the_http_layer(settings: Settings) -> N
             response = await client.post(
                 "/v1/lookup",
                 json={"items": [{"name": "Bohemian Rhapsody", "artist": "Queen"}]},
-                headers={"X-Keyring-User-Token": USER_TOKEN},
+                headers={"Authorization": f"Bearer {USER_TOKEN}"},
             )
 
     assert response.status_code == 200

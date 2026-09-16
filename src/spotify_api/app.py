@@ -12,23 +12,26 @@ reuse, which is most of the cost of talking to Spotify at all.
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import FastAPI
 
+# Composition root: the JWKS client and token verifier are built here, once, for the process.
+from keyring_client import JwksClient, SystemClock, TokenVerifier, jwks_url
+
 import spotify_api
+from spotify_api.api.errors import register_exception_handlers
+from spotify_api.api.middleware import RequestContextMiddleware
 from spotify_api.api.router import api_router, root_router
 from spotify_api.config import Settings, get_settings
 from spotify_api.credentials.keyring import KeyringCredentialProvider
-from spotify_api.errors import install_exception_handlers
 from spotify_api.jobs.confirm import PlaybackConfirmer
 from spotify_api.jobs.runner import JobRunner
 from spotify_api.jobs.store import InMemoryJobStore
-from spotify_api.logging import configure_logging
-from spotify_api.middleware import RequestContextMiddleware
+from spotify_api.logging import configure_logging, get_logger
+from spotify_api.preferences import build_preference_source
 from spotify_api.spotify.client import SpotifyClient
 from spotify_api.spotify.resolver import SpotifyTrackResolver
 from spotify_api.spotify.resources.player import PlayerResource
@@ -36,9 +39,11 @@ from spotify_api.spotify.resources.player import PlayerResource
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from spotify_api.preferences import PreferenceSource
+
 __all__ = ["create_app"]
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 _DESCRIPTION = """
 Resolve batches of loosely-specified tracks against the Spotify Web API.
@@ -68,7 +73,11 @@ def _build_graph(
 
 
 def create_app(
-    *, settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None
+    *,
+    settings: Settings | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+    keyring_transport: httpx.AsyncBaseTransport | None = None,
+    preferences: PreferenceSource | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -78,6 +87,11 @@ def create_app(
         transport: HTTP transport for the shared client. Left as ``None`` in
             production; tests pass an ``httpx.MockTransport`` to exercise the
             whole stack with the network as the only thing faked.
+        keyring_transport: HTTP transport for fetching keyring's published keys. Defaults to
+            ``transport``; tests that fake Spotify some other way pass keyring's fake here.
+        preferences: Where per-person settings come from. Constructed here from
+            ``settings`` when omitted; tests pass a source built over a fake client.
+            The client is not asked until a request needs a person's settings.
     """
     resolved_settings = settings if settings is not None else get_settings()
     configure_logging(level=resolved_settings.log_level, log_format=resolved_settings.log_format)
@@ -104,15 +118,14 @@ def create_app(
             )
             app.state.job_store = InMemoryJobStore(ttl_seconds=resolved_settings.job_ttl_seconds)
             app.state.job_runner = JobRunner(store=app.state.job_store)
-            _logger.info(
-                "application started",
-                extra={"environment": resolved_settings.environment},
-            )
+            _logger.info("application_started", environment=resolved_settings.environment)
             yield
-            _logger.info("application shutting down")
+            _logger.info("application_shutting_down")
             # Jobs outlive the request that created them, so they must be
             # cancelled deliberately or shutdown hangs on them.
             await app.state.job_runner.shutdown()
+            await app.state.jwks.aclose()
+            await app.state.preferences.aclose()
 
     app = FastAPI(
         title="Spotify Lookup API",
@@ -132,11 +145,34 @@ def create_app(
     # holds no external resource, so it needs no lifespan of its own -- only
     # its runner does, to cancel work still in flight at shutdown.
     app.state.settings = resolved_settings
+    app.state.preferences = (
+        preferences if preferences is not None else build_preference_source(resolved_settings)
+    )
     app.state.job_store = InMemoryJobStore(ttl_seconds=resolved_settings.job_ttl_seconds)
     app.state.job_runner = JobRunner(store=app.state.job_store)
 
+    # Built with the app rather than in the lifespan, for the same reason as the job store:
+    # a request must be verifiable before the lifespan has run. Constructing it makes no
+    # network call -- the first token to arrive is what fetches keyring's keys -- so a keyring
+    # that is down cannot stop this service starting. Both are handed this service's logger, so
+    # why a token was refused reaches the operator in the same format, redacted by the same
+    # rules, as every other record; left to themselves they would write to the standard library.
+    clock = SystemClock()
+    app.state.jwks = JwksClient(
+        url=jwks_url(resolved_settings.keyring_base_url),
+        clock=clock,
+        cache_seconds=resolved_settings.jwks_cache_seconds,
+        min_refetch_seconds=resolved_settings.jwks_min_refetch_seconds,
+        timeout_seconds=resolved_settings.keyring_timeout_seconds,
+        transport=keyring_transport if keyring_transport is not None else transport,
+        logger=_logger,
+    )
+    app.state.verifier = TokenVerifier(
+        jwks=app.state.jwks, issuer=resolved_settings.keyring_issuer, clock=clock, logger=_logger
+    )
+
     app.add_middleware(RequestContextMiddleware)
-    install_exception_handlers(app)
+    register_exception_handlers(app)
     app.include_router(root_router)
     app.include_router(api_router)
     return app

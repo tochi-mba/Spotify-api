@@ -14,5 +14,5 @@ __all__ = ["SERVICE_NAME", "__version__"]
 #: Semantic version of the service. Kept in lockstep with ``pyproject.toml``.
 __version__ = "0.1.0"
 
-#: Stable identifier reported by ``GET /healthy`` and emitted on every log line.
+#: Stable identifier reported by ``GET /healthy``, and the audience keyring mints tokens for.
 SERVICE_NAME = "spotify-api"

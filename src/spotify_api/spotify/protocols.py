@@ -25,7 +25,12 @@ class TrackResolver(Protocol):
     """Resolves submitted items into results, one for one, in order."""
 
     async def resolve(
-        self, items: Sequence[LookupItem], *, context: UserContext, market: str | None = None
+        self,
+        items: Sequence[LookupItem],
+        *,
+        context: UserContext,
+        market: str | None = None,
+        default_market: str | None = None,
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order."""
         ...

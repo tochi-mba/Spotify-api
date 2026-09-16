@@ -15,6 +15,8 @@ WORKDIR /app
 # itself, so this layer stays cached until the lockfile actually changes --
 # editing source does not re-resolve or re-download anything.
 COPY pyproject.toml uv.lock ./
+# git: uv fetches the family's client packages from tagged git sources.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
@@ -44,11 +46,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1
 
 USER app
-EXPOSE 8000
+EXPOSE 8007
 
 # Liveness only. /ready would mark the container unhealthy whenever Spotify is
 # having a bad afternoon, and a container healthcheck should not mean that.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -fsS http://localhost:8000/healthy || exit 1
+    CMD curl -fsS http://localhost:8007/healthy || exit 1
 
 CMD ["python", "-m", "spotify_api"]

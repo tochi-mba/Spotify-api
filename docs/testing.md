@@ -3,7 +3,7 @@
 ## The gate
 
 ```bash
-make check   # ruff, format, mypy --strict, pytest at 100% branch coverage
+make check   # ruff, format, mypy --strict, import-linter, pytest at 100% branch coverage
 ```
 
 Coverage is 100%, branch-inclusive, enforced by `--cov-fail-under=100` in
@@ -33,12 +33,14 @@ uv run pytest                          # everything except live
 uv run pytest tests/unit -q            # one suite
 uv run pytest -k stampede              # one behaviour
 uv run pytest -m live                  # the real API (needs credentials)
-make cov && open htmlcov/index.html    # where the gaps are
+make test-live                         # same, via the Makefile
+make cov                               # HTML report in htmlcov/
 ```
 
 Live tests are deselected by default and skip outright without
-`SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`, so the full suite runs on a
-machine that has never seen a Spotify credential.
+`SPOTIFY_API_KEYRING_BASE_URL`, `SPOTIFY_API_KEYRING_SERVICE_TOKEN` and
+`SPOTIFY_LIVE_USER_TOKEN`, so the full suite runs on a machine that has never
+seen keyring or a Spotify credential.
 
 ## Conventions
 
@@ -47,6 +49,11 @@ machine that has never seen a Spotify credential.
 - **Build settings with `make_settings()`** from `tests/factories.py`. It supplies
   dummy credentials and disables `.env` loading, so tests never depend on the
   machine they run on.
+- **Identity is real in every route test.** `user_token()` mints a token the way
+  keyring does and the app verifies it against `keyring_client.testing`'s JWKS
+  document. Use the `other_client` fixture for a second person on the same
+  deployment: every stateful route needs a test that one account cannot see
+  another's data.
 - **Fake at the transport, not the library.** `httpx.MockTransport` exercises the
   real request-building and response-parsing code. Patching `SpotifyClient.search`
   would test the mock instead.
@@ -64,11 +71,12 @@ the same bytes.
 
 To refresh one:
 
-```bash
-TOKEN=$(curl -s -X POST https://accounts.spotify.com/api/token \
-  -H "Authorization: Basic $(printf '%s:%s' "$SPOTIFY_CLIENT_ID" "$SPOTIFY_CLIENT_SECRET" | base64 -w0)" \
-  -d grant_type=client_credentials | jq -r .access_token)
+Use any Spotify access token that can search the public catalogue. This service no
+longer holds a Client Credentials grant; a connected account's token from keyring is
+enough, as is a one-off token from the Spotify developer dashboard used only to
+refresh fixtures.
 
+```bash
 curl -s -G https://api.spotify.com/v1/search \
   -H "Authorization: Bearer $TOKEN" \
   --data-urlencode 'q=track:"Bohemian Rhapsody" artist:"Queen"' \

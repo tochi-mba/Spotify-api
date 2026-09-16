@@ -33,5 +33,12 @@ class UserContext(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    account_id: str = Field(
+        description=(
+            "The verified keyring account id: the token's ``sub``, checked against keyring's "
+            "published keys. The only identity this service learns, and the key every piece of "
+            "stored state is scoped by."
+        )
+    )
     user_token: SecretStr = Field(description="The caller's short-lived keyring token.")
     profile: str = Field(description="Which keyring profile to read the credential from.")

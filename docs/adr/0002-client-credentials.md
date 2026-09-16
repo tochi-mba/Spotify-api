@@ -1,11 +1,18 @@
 # ADR 0002 — Authenticate with the Client Credentials flow
 
-**Status:** accepted
+**Status:** superseded
+
+The service no longer holds a Spotify app grant. A person's Spotify connection lives in
+keyring; this service presents two credentials on every upstream call (its own service
+token, plus the caller's keyring user token) and attaches whatever headers keyring
+returns. See `docs/architecture.md` and `docs/operations.md`.
+
+The original decision is kept below so the change is visible.
 
 ## Context
 
 Spotify offers Authorization Code (acting as a user) and Client Credentials
-(acting as the application). This service reads public catalogue metadata only.
+(acting as the application). This service originally read public catalogue metadata only.
 
 ## Decision
 
@@ -35,3 +42,10 @@ Client Credentials, with an in-memory token cache guarded by an `asyncio.Lock`.
   fine at this scale and avoids a shared cache dependency.
 - Time is injected as a `clock` callable so expiry logic is tested directly
   rather than waited for.
+
+## Superseded because
+
+Player control and per-account jobs need a user context. The stampede-safe cache
+and injected clock remain, now around keyring's credential response rather than
+Spotify's token endpoint. A compromise of this service still never holds a
+Spotify refresh token; keyring does.

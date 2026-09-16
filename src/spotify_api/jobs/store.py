@@ -3,6 +3,12 @@
 Jobs live in a dict guarded by a lock, with a TTL so a long-running process
 does not accumulate every job it has ever run.
 
+Every job belongs to the account whose verified token created it, and every read
+takes that account. A job owned by somebody else is answered exactly like one that
+never existed: a job's result is the body the synchronous call would have returned --
+somebody's playback state, somebody's lookups -- and a different answer for "exists
+but is not yours" would confirm another person's activity.
+
 The honest limitation: jobs vanish on restart, and a second replica knows
 nothing of the first's jobs. That is acceptable because a job's lifetime is
 seconds and the caller is polling right now -- and because the ``JobStore``
@@ -44,11 +50,12 @@ class InMemoryJobStore:
         self._jobs: dict[str, Job] = {}
         self._lock = asyncio.Lock()
 
-    async def create(self, *, operation: str) -> Job:
-        """Record a new pending job and return it."""
+    async def create(self, *, operation: str, account_id: str) -> Job:
+        """Record a new pending job for ``account_id`` and return it."""
         job = Job(
             job_id=str(uuid.uuid4()),
             operation=operation,
+            account_id=account_id,
             status=JobStatus.PENDING,
             created_at=self._clock(),
         )
@@ -57,25 +64,28 @@ class InMemoryJobStore:
             self._jobs[job.job_id] = job
         return job
 
-    async def get(self, job_id: str) -> Job:
-        """Return one job.
+    async def get(self, job_id: str, *, account_id: str) -> Job:
+        """Return one of ``account_id``'s jobs.
 
         Raises:
-            JobNotFoundError: the job is unknown, or has aged out.
+            JobNotFoundError: the job is unknown, has aged out, or belongs to another
+                account -- one answer for all three, on purpose.
         """
         async with self._lock:
             self._reap()
             job = self._jobs.get(job_id)
-        if job is None:
+        if job is None or job.account_id != account_id:
             message = "no such job; it may have expired"
             raise JobNotFoundError(message, job_id=job_id)
         return job
 
-    async def list(self, *, status: JobStatus | None = None, limit: int = 50) -> list[Job]:
-        """Return jobs, newest first."""
+    async def list(
+        self, *, account_id: str, status: JobStatus | None = None, limit: int = 50
+    ) -> list[Job]:
+        """Return ``account_id``'s jobs, newest first."""
         async with self._lock:
             self._reap()
-            jobs = list(self._jobs.values())
+            jobs = [job for job in self._jobs.values() if job.account_id == account_id]
         if status is not None:
             jobs = [job for job in jobs if job.status is status]
         jobs.sort(key=lambda job: job.created_at, reverse=True)

@@ -1,32 +1,38 @@
-# Run `uv run pre-commit install` once; these then run on every commit.
-# They are a fast subset of `make check` -- CI remains the authority.
+# Fast local gate. `make check` remains the authority — these hooks are a subset
+# chosen to run in under a second on a staged diff.
+default_language_version:
+  python: python3.11
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
-      - id: check-merge-conflict
-      - id: detect-private-key
+        args: ["--maxkb=512"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.16.6
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: ruff-check
+        args: ["--fix"]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+  - repo: local
     hooks:
       - id: mypy
-        args: [--strict]
-        additional_dependencies:
-          - fastapi
-          - pydantic
-          - pydantic-settings
-          - httpx
-          - pytest
+        name: mypy (strict)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: import-linter
+        name: architecture contracts
+        entry: uv run lint-imports
+        language: system
+        types: [python]
+        pass_filenames: false

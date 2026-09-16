@@ -29,6 +29,12 @@ class Job(BaseModel):
 
     job_id: str = Field(description="Identifier to poll with.")
     operation: str = Field(description="What was asked for, e.g. 'player.play'.")
+    account_id: str = Field(
+        description=(
+            "The keyring account whose verified token created this job. Only that account may "
+            "read or cancel it, and it is never rendered into a response."
+        )
+    )
     status: JobStatus = Field(description="pending, running, succeeded, failed or cancelled.")
     created_at: float = Field(description="Monotonic timestamp the job was accepted.")
     started_at: float | None = Field(default=None, description="When work began.")

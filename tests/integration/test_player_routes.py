@@ -7,16 +7,18 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
+from keyring_client import JWKS_PATH
+from keyring_client.testing import jwks
 
 from spotify_api.app import create_app
-from tests.factories import make_settings
+from tests.factories import make_settings, problem_type, user_token
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 TRACK = "spotify:track:7tFiyTwD0nx5a1eklYtX2J"
 OTHER = "spotify:track:0000000000000000000000"
-USER_TOKEN = "player-user-token"
+USER_TOKEN = user_token("player-account")
 SPOTIFY_URL = "https://api.spotify.test/v1"
 
 
@@ -56,15 +58,7 @@ class FakeSpotify:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.host == "keyring.test":
-            return httpx.Response(
-                200,
-                json={
-                    "service": "spotify",
-                    "headers": {"Authorization": "Bearer spotify-token"},
-                    "query_params": {},
-                    "expires_at": None,
-                },
-            )
+            return self._keyring(request)
 
         path = request.url.path.removeprefix("/v1")
         if request.method == "GET" and path == "/me/player":
@@ -83,6 +77,21 @@ class FakeSpotify:
         if self.on_command is not None and self.state is not None:
             self.state = {**self.state, **self.on_command}
         return httpx.Response(204)
+
+    @staticmethod
+    def _keyring(request: httpx.Request) -> httpx.Response:
+        """Keyring's published keys, or the Spotify credential it would hand over."""
+        if request.url.path == JWKS_PATH:
+            return httpx.Response(200, json=jwks())
+        return httpx.Response(
+            200,
+            json={
+                "service": "spotify",
+                "headers": {"Authorization": "Bearer spotify-token"},
+                "query_params": {},
+                "expires_at": None,
+            },
+        )
 
     @staticmethod
     def _read(path: str) -> dict[str, Any]:
@@ -104,7 +113,7 @@ def spotify() -> FakeSpotify:
 async def client(spotify: FakeSpotify) -> AsyncIterator[httpx.AsyncClient]:
     settings = make_settings(
         keyring_base_url="https://keyring.test",
-        spotify_api_base_url=SPOTIFY_URL,
+        spotify_base_url=SPOTIFY_URL,
         confirm_poll_interval_seconds=0.001,
         confirm_timeout_seconds=0.05,
     )
@@ -114,7 +123,7 @@ async def client(spotify: FakeSpotify) -> AsyncIterator[httpx.AsyncClient]:
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://test",
-            headers={"X-Keyring-User-Token": USER_TOKEN},
+            headers={"Authorization": f"Bearer {USER_TOKEN}"},
         ) as http_client:
             yield http_client
 
@@ -195,9 +204,9 @@ async def test_play_is_not_confirmed_by_a_different_track_already_playing(
     response = await client.post("/v1/player/play", json={"uris": [TRACK]})
 
     assert response.status_code == 504
-    error = response.json()["error"]
-    assert error["type"] == "confirmation_timeout"
-    assert error["details"]["observed"]["item"]["uri"] == OTHER
+    problem = response.json()
+    assert problem["type"] == problem_type("confirmation-timeout")
+    assert problem["details"]["observed"]["item"]["uri"] == OTHER
 
 
 async def test_a_resume_confirms_only_that_something_is_playing(
@@ -228,7 +237,7 @@ async def test_naming_both_a_context_and_uris_is_rejected(client: httpx.AsyncCli
         "/v1/player/play", json={"context_uri": "spotify:album:abc", "uris": [TRACK]}
     )
     assert response.status_code == 422
-    assert response.json()["error"]["type"] == "validation_error"
+    assert response.json()["type"] == problem_type("validation-failed")
 
 
 async def test_a_device_id_is_passed_through(
@@ -367,9 +376,9 @@ async def test_a_free_account_is_told_it_needs_premium(
     response = await client.post("/v1/player/play", json={"uris": [TRACK]})
 
     assert response.status_code == 403
-    error = response.json()["error"]
-    assert error["type"] == "premium_required"
-    assert "Premium" in error["message"]
+    problem = response.json()
+    assert problem["type"] == problem_type("premium-required")
+    assert "Premium" in problem["detail"]
 
 
 async def test_no_active_device_is_actionable(
@@ -381,9 +390,9 @@ async def test_no_active_device_is_actionable(
     response = await client.post("/v1/player/play", json={"uris": [TRACK]})
 
     assert response.status_code == 409
-    error = response.json()["error"]
-    assert error["type"] == "no_active_device"
-    assert "device_id" in error["message"]
+    problem = response.json()
+    assert problem["type"] == problem_type("no-active-device")
+    assert "device_id" in problem["detail"]
 
 
 async def test_a_command_accepted_with_nothing_playing_anywhere_says_so(
@@ -394,13 +403,11 @@ async def test_a_command_accepted_with_nothing_playing_anywhere_says_so(
     response = await client.post("/v1/player/pause")
 
     assert response.status_code == 409
-    assert response.json()["error"]["type"] == "no_active_device"
+    assert response.json()["type"] == problem_type("no-active-device")
 
 
 async def test_every_command_requires_a_user_token(spotify: FakeSpotify) -> None:
-    settings = make_settings(
-        keyring_base_url="https://keyring.test", spotify_api_base_url=SPOTIFY_URL
-    )
+    settings = make_settings(keyring_base_url="https://keyring.test", spotify_base_url=SPOTIFY_URL)
     app = create_app(settings=settings, transport=httpx.MockTransport(spotify))
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -485,4 +492,4 @@ async def test_skipping_with_nothing_playing_is_reported_as_no_device(
     response = await client.post("/v1/player/next")
 
     assert response.status_code == 409
-    assert response.json()["error"]["type"] == "no_active_device"
+    assert response.json()["type"] == problem_type("no-active-device")

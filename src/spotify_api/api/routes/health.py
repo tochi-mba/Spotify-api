@@ -47,8 +47,9 @@ async def healthy() -> HealthResponse:
     summary="Readiness probe",
     description=(
         "Reports whether the service can currently serve lookups, which means "
-        "verifying that a Spotify access token can be obtained. Returns 503 "
-        "when it cannot."
+        "keyring's published signing keys can be fetched. Returns 503 when they "
+        "cannot. The JSON still names that check `spotify`: it is the gate on "
+        "whether this process can talk to Spotify on anyone's behalf."
     ),
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ReadyResponse}},
 )

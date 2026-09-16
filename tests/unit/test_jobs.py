@@ -1,4 +1,4 @@
-"""Jobs run work in the background and report a confirmed outcome."""
+"""Jobs run work in the background, report a confirmed outcome, and belong to one account."""
 
 from __future__ import annotations
 
@@ -12,6 +12,9 @@ from spotify_api.jobs.models import JobStatus
 from spotify_api.jobs.protocols import JobStore
 from spotify_api.jobs.runner import JobRunner
 from spotify_api.jobs.store import InMemoryJobStore
+
+ALICE = "account-alice"
+BOB = "account-bob"
 
 
 class FakeClock:
@@ -50,7 +53,7 @@ async def settle() -> None:
 
 
 async def test_a_created_job_starts_pending(store: InMemoryJobStore) -> None:
-    job = await store.create(operation="player.play")
+    job = await store.create(operation="player.play", account_id=ALICE)
 
     assert job.status is JobStatus.PENDING
     assert job.operation == "player.play"
@@ -60,83 +63,85 @@ async def test_a_created_job_starts_pending(store: InMemoryJobStore) -> None:
 
 
 async def test_job_ids_are_unique(store: InMemoryJobStore) -> None:
-    ids = {(await store.create(operation="op")).job_id for _ in range(50)}
+    ids = {(await store.create(operation="op", account_id=ALICE)).job_id for _ in range(50)}
     assert len(ids) == 50
 
 
 async def test_a_job_can_be_read_back(store: InMemoryJobStore) -> None:
-    created = await store.create(operation="op")
-    assert (await store.get(created.job_id)).job_id == created.job_id
+    created = await store.create(operation="op", account_id=ALICE)
+    assert (await store.get(created.job_id, account_id=ALICE)).job_id == created.job_id
 
 
 async def test_reading_an_unknown_job_is_an_error(store: InMemoryJobStore) -> None:
     with pytest.raises(JobNotFoundError, match="no such job"):
-        await store.get("does-not-exist")
+        await store.get("does-not-exist", account_id=ALICE)
 
 
 async def test_jobs_are_listed_newest_first(store: InMemoryJobStore, clock: FakeClock) -> None:
-    first = await store.create(operation="a")
+    first = await store.create(operation="a", account_id=ALICE)
     clock.advance(1)
-    second = await store.create(operation="b")
+    second = await store.create(operation="b", account_id=ALICE)
 
-    assert [job.job_id for job in await store.list()] == [second.job_id, first.job_id]
+    listed = await store.list(account_id=ALICE)
+    assert [job.job_id for job in listed] == [second.job_id, first.job_id]
 
 
 async def test_listing_can_be_filtered_by_status(store: InMemoryJobStore) -> None:
-    done = await store.create(operation="a")
+    done = await store.create(operation="a", account_id=ALICE)
     await store.finish(done.job_id, result={"ok": True})
-    await store.create(operation="b")
+    await store.create(operation="b", account_id=ALICE)
 
-    listed = await store.list(status=JobStatus.SUCCEEDED)
+    listed = await store.list(account_id=ALICE, status=JobStatus.SUCCEEDED)
     assert [job.job_id for job in listed] == [done.job_id]
 
 
 async def test_listing_is_bounded(store: InMemoryJobStore) -> None:
     for _ in range(10):
-        await store.create(operation="op")
-    assert len(await store.list(limit=3)) == 3
+        await store.create(operation="op", account_id=ALICE)
+    assert len(await store.list(account_id=ALICE, limit=3)) == 3
 
 
 async def test_finishing_a_job_records_its_result(store: InMemoryJobStore) -> None:
-    job = await store.create(operation="op")
+    job = await store.create(operation="op", account_id=ALICE)
     await store.finish(job.job_id, result={"is_playing": True})
 
-    stored = await store.get(job.job_id)
+    stored = await store.get(job.job_id, account_id=ALICE)
     assert stored.status is JobStatus.SUCCEEDED
     assert stored.result == {"is_playing": True}
     assert stored.completed_at is not None
 
 
 async def test_failing_a_job_records_why(store: InMemoryJobStore) -> None:
-    job = await store.create(operation="op")
+    job = await store.create(operation="op", account_id=ALICE)
     await store.fail(job.job_id, error="no active device", error_type="no_active_device")
 
-    stored = await store.get(job.job_id)
+    stored = await store.get(job.job_id, account_id=ALICE)
     assert stored.status is JobStatus.FAILED
     assert stored.error == "no active device"
     assert stored.error_type == "no_active_device"
 
 
 async def test_expired_jobs_are_reaped(store: InMemoryJobStore, clock: FakeClock) -> None:
-    job = await store.create(operation="op")
+    job = await store.create(operation="op", account_id=ALICE)
     clock.advance(3601)
     with pytest.raises(JobNotFoundError):
-        await store.get(job.job_id)
+        await store.get(job.job_id, account_id=ALICE)
 
 
 async def test_an_unexpired_job_survives(store: InMemoryJobStore, clock: FakeClock) -> None:
-    job = await store.create(operation="op")
+    job = await store.create(operation="op", account_id=ALICE)
     clock.advance(3599)
-    assert await store.get(job.job_id)
+    surviving = await store.get(job.job_id, account_id=ALICE)
+    assert surviving.job_id == job.job_id
 
 
 async def test_reaping_removes_expired_jobs_from_listings(
     store: InMemoryJobStore, clock: FakeClock
 ) -> None:
-    await store.create(operation="old")
+    await store.create(operation="old", account_id=ALICE)
     clock.advance(3601)
-    fresh = await store.create(operation="new")
-    assert [job.operation for job in await store.list()] == ["new"]
+    fresh = await store.create(operation="new", account_id=ALICE)
+    assert [job.operation for job in await store.list(account_id=ALICE)] == ["new"]
     assert fresh.job_id
 
 
@@ -147,6 +152,51 @@ async def test_updating_an_unknown_job_is_an_error(store: InMemoryJobStore) -> N
         await store.fail("nope", error="x", error_type="y")
 
 
+# -- isolation --------------------------------------------------------------
+#
+# One process serves many people, and a job's result is the body the synchronous call
+# would have returned -- somebody's playback state, somebody's lookups. A job answers only
+# to the account whose verified token created it. Everybody else gets exactly what an
+# unknown id gets, so the store never confirms that a job exists.
+
+
+async def test_a_job_remembers_which_account_it_was_done_for(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+    assert job.account_id == ALICE
+
+
+async def test_another_account_cannot_read_a_job(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+
+    with pytest.raises(JobNotFoundError, match="no such job"):
+        await store.get(job.job_id, account_id=BOB)
+
+
+async def test_listing_shows_only_the_callers_own_jobs(store: InMemoryJobStore) -> None:
+    mine = await store.create(operation="mine", account_id=ALICE)
+    await store.create(operation="theirs", account_id=BOB)
+
+    assert [job.job_id for job in await store.list(account_id=ALICE)] == [mine.job_id]
+
+
+async def test_another_account_cannot_cancel_a_job(runner: JobRunner) -> None:
+    started = asyncio.Event()
+
+    async def work() -> dict[str, Any]:
+        started.set()
+        await asyncio.sleep(60)
+        return {}
+
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    with pytest.raises(JobNotFoundError, match="no such job"):
+        await runner.cancel(job.job_id, account_id=BOB)
+
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.RUNNING
+    await runner.shutdown()
+
+
 # -- the runner -------------------------------------------------------------
 
 
@@ -154,12 +204,13 @@ async def test_a_submitted_job_runs_and_records_its_result(runner: JobRunner) ->
     async def work() -> dict[str, Any]:
         return {"ok": True}
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     assert job.status is JobStatus.PENDING
 
     await settle()
-    assert (await runner.store.get(job.job_id)).status is JobStatus.SUCCEEDED
-    assert (await runner.store.get(job.job_id)).result == {"ok": True}
+    stored = await runner.store.get(job.job_id, account_id=ALICE)
+    assert stored.status is JobStatus.SUCCEEDED
+    assert stored.result == {"ok": True}
 
 
 async def test_the_caller_is_not_blocked_while_the_job_runs(runner: JobRunner) -> None:
@@ -171,23 +222,23 @@ async def test_the_caller_is_not_blocked_while_the_job_runs(runner: JobRunner) -
         await release.wait()
         return {"ok": True}
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     await asyncio.wait_for(started.wait(), timeout=1)
-    assert (await runner.store.get(job.job_id)).status is JobStatus.RUNNING
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.RUNNING
 
     release.set()
     await settle()
-    assert (await runner.store.get(job.job_id)).status is JobStatus.SUCCEEDED
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.SUCCEEDED
 
 
 async def test_a_declared_failure_is_recorded_with_its_type(runner: JobRunner) -> None:
     async def work() -> dict[str, Any]:
         raise NoActiveDeviceError("no active Spotify device was found")
 
-    job = await runner.submit(operation="player.play", work=work)
+    job = await runner.submit(operation="player.play", account_id=ALICE, work=work)
     await settle()
 
-    stored = await runner.store.get(job.job_id)
+    stored = await runner.store.get(job.job_id, account_id=ALICE)
     assert stored.status is JobStatus.FAILED
     assert stored.error_type == "no_active_device"
     assert "no active Spotify device" in (stored.error or "")
@@ -197,10 +248,10 @@ async def test_an_unexpected_failure_is_contained_and_not_leaked(runner: JobRunn
     async def work() -> dict[str, Any]:
         raise RuntimeError("connection pool corrupted")
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     await settle()
 
-    stored = await runner.store.get(job.job_id)
+    stored = await runner.store.get(job.job_id, account_id=ALICE)
     assert stored.status is JobStatus.FAILED
     assert stored.error_type == "internal_error"
     assert "connection pool corrupted" not in (stored.error or "")
@@ -213,12 +264,12 @@ async def test_one_failing_job_does_not_affect_another(runner: JobRunner) -> Non
     async def fine() -> dict[str, Any]:
         return {"ok": True}
 
-    bad = await runner.submit(operation="a", work=boom)
-    good = await runner.submit(operation="b", work=fine)
+    bad = await runner.submit(operation="a", account_id=ALICE, work=boom)
+    good = await runner.submit(operation="b", account_id=ALICE, work=fine)
     await settle()
 
-    assert (await runner.store.get(bad.job_id)).status is JobStatus.FAILED
-    assert (await runner.store.get(good.job_id)).status is JobStatus.SUCCEEDED
+    assert (await runner.store.get(bad.job_id, account_id=ALICE)).status is JobStatus.FAILED
+    assert (await runner.store.get(good.job_id, account_id=ALICE)).status is JobStatus.SUCCEEDED
 
 
 async def test_a_job_can_be_cancelled_while_it_runs(runner: JobRunner) -> None:
@@ -229,29 +280,29 @@ async def test_a_job_can_be_cancelled_while_it_runs(runner: JobRunner) -> None:
         await asyncio.sleep(60)
         return {}
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     await asyncio.wait_for(started.wait(), timeout=1)
 
-    await runner.cancel(job.job_id)
+    await runner.cancel(job.job_id, account_id=ALICE)
     await settle()
 
-    assert (await runner.store.get(job.job_id)).status is JobStatus.CANCELLED
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.CANCELLED
 
 
 async def test_cancelling_a_finished_job_leaves_it_alone(runner: JobRunner) -> None:
     async def work() -> dict[str, Any]:
         return {"ok": True}
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     await settle()
-    await runner.cancel(job.job_id)
+    await runner.cancel(job.job_id, account_id=ALICE)
 
-    assert (await runner.store.get(job.job_id)).status is JobStatus.SUCCEEDED
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.SUCCEEDED
 
 
 async def test_cancelling_an_unknown_job_is_an_error(runner: JobRunner) -> None:
     with pytest.raises(JobNotFoundError):
-        await runner.cancel("nope")
+        await runner.cancel("nope", account_id=ALICE)
 
 
 async def test_shutdown_cancels_everything_still_running(runner: JobRunner) -> None:
@@ -259,11 +310,11 @@ async def test_shutdown_cancels_everything_still_running(runner: JobRunner) -> N
         await asyncio.sleep(60)
         return {}
 
-    job = await runner.submit(operation="op", work=work)
+    job = await runner.submit(operation="op", account_id=ALICE, work=work)
     await settle()
     await runner.shutdown()
 
-    assert (await runner.store.get(job.job_id)).status is JobStatus.CANCELLED
+    assert (await runner.store.get(job.job_id, account_id=ALICE)).status is JobStatus.CANCELLED
 
 
 async def test_shutdown_is_safe_with_nothing_running(runner: JobRunner) -> None:
@@ -276,7 +327,7 @@ async def test_finished_tasks_are_not_retained(runner: JobRunner) -> None:
         return {}
 
     for _ in range(5):
-        await runner.submit(operation="op", work=work)
+        await runner.submit(operation="op", account_id=ALICE, work=work)
     await settle()
 
     assert runner.in_flight == 0
@@ -291,19 +342,19 @@ async def test_recording_an_attempt_against_an_unknown_job_is_harmless(
 
 
 async def test_attempts_accumulate(store: InMemoryJobStore) -> None:
-    job = await store.create(operation="op")
+    job = await store.create(operation="op", account_id=ALICE)
     await store.record_attempt(job.job_id)
     await store.record_attempt(job.job_id)
-    assert (await store.get(job.job_id)).attempts == 2
+    assert (await store.get(job.job_id, account_id=ALICE)).attempts == 2
 
 
 async def test_cancelling_a_job_this_runner_never_started_still_records_it(
     runner: JobRunner, store: InMemoryJobStore
 ) -> None:
     # Stores outlive runners; a job with no task here is still cancellable.
-    job = await store.create(operation="orphan")
-    await runner.cancel(job.job_id)
-    assert (await store.get(job.job_id)).status is JobStatus.CANCELLED
+    job = await store.create(operation="orphan", account_id=ALICE)
+    await runner.cancel(job.job_id, account_id=ALICE)
+    assert (await store.get(job.job_id, account_id=ALICE)).status is JobStatus.CANCELLED
 
 
 def test_the_in_memory_store_satisfies_the_seam(store: InMemoryJobStore) -> None:

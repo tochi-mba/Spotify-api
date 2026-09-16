@@ -23,7 +23,6 @@ Sleeping is injected so the ladder is asserted rather than waited out.
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -36,6 +35,7 @@ from spotify_api.errors import (
     SpotifyRateLimitError,
     SpotifyUnavailableError,
 )
+from spotify_api.logging import get_logger
 from spotify_api.spotify.mappers import first_track
 from spotify_api.spotify.query import build_search_query
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 __all__ = ["SpotifyClient", "SpotifyResponse"]
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 _UNAUTHORIZED = 401
 _FORBIDDEN = 403
@@ -144,7 +144,7 @@ class SpotifyClient:
             SpotifyRateLimitError: Rate limited past the retry budget.
             SpotifyUnavailableError: Unreachable, or failing past the budget.
         """
-        url = f"{self._settings.spotify_api_base_url}{path}"
+        url = f"{self._settings.spotify_base_url}{path}"
         query = {key: _encode(value) for key, value in (params or {}).items() if value is not None}
         budget = self._settings.max_retries
         attempt = 0
@@ -165,8 +165,11 @@ class SpotifyClient:
                 )
             except httpx.HTTPError as exc:
                 if attempt >= budget:
+                    # The type only, and never into the error: the exception's text carries the
+                    # URL it failed to reach.
+                    _logger.warning("spotify_unreachable", error=type(exc).__name__)
                     message = "the Spotify API is unreachable"
-                    raise SpotifyUnavailableError(message, cause=str(exc)) from exc
+                    raise SpotifyUnavailableError(message) from exc
                 await self._sleep(self._backoff(attempt))
                 attempt += 1
                 continue
@@ -175,7 +178,7 @@ class SpotifyClient:
                 # The token keyring gave us has expired sooner than advertised.
                 # Drop it so keyring refreshes the grant, then try once more.
                 # This is a correction, not a retry, so it costs no budget.
-                _logger.info("spotify rejected the credential; re-resolving once")
+                _logger.info("spotify_credential_rejected_resolving_again")
                 self._credentials.invalidate(
                     user_token=context.user_token.get_secret_value(), profile=context.profile
                 )
@@ -184,7 +187,7 @@ class SpotifyClient:
 
             if response.status_code == _UNAUTHORIZED:
                 message = "Spotify rejected the credential"
-                raise SpotifyAuthError(message, status_code=_UNAUTHORIZED)
+                raise SpotifyAuthError(message, upstream_status=_UNAUTHORIZED)
 
             if response.status_code == _FORBIDDEN:
                 self._raise_forbidden(response)
@@ -197,9 +200,7 @@ class SpotifyClient:
                 if attempt >= budget:
                     message = "Spotify rate limit exceeded and the retry budget is exhausted"
                     raise SpotifyRateLimitError(message, retry_after=retry_after)
-                _logger.warning(
-                    "spotify rate limited the request", extra={"retry_after": retry_after}
-                )
+                _logger.warning("spotify_rate_limited", retry_after=retry_after)
                 await self._sleep(retry_after)
                 attempt += 1
                 continue
@@ -207,7 +208,7 @@ class SpotifyClient:
             if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
                 if attempt >= budget:
                     message = "the Spotify API is failing"
-                    raise SpotifyUnavailableError(message, status_code=response.status_code)
+                    raise SpotifyUnavailableError(message, upstream_status=response.status_code)
                 await self._sleep(self._backoff(attempt))
                 attempt += 1
                 continue
@@ -215,7 +216,9 @@ class SpotifyClient:
             if response.status_code >= httpx.codes.BAD_REQUEST:
                 message = "Spotify rejected the request"
                 raise SpotifyUnavailableError(
-                    message, status_code=response.status_code, detail=_message_of(response)
+                    message,
+                    upstream_status=response.status_code,
+                    upstream_detail=_message_of(response),
                 )
 
             return self._parse(response)
@@ -258,7 +261,9 @@ class SpotifyClient:
             )
             raise PremiumRequiredError(message)
         message = "Spotify refused the request"
-        raise SpotifyAuthError(message, status_code=_FORBIDDEN, detail=_message_of(response))
+        raise SpotifyAuthError(
+            message, upstream_status=_FORBIDDEN, upstream_detail=_message_of(response)
+        )
 
     @staticmethod
     def _raise_not_found(response: httpx.Response, path: str) -> None:
@@ -271,7 +276,9 @@ class SpotifyClient:
             )
             raise NoActiveDeviceError(message)
         message = "Spotify has no such resource"
-        raise SpotifyUnavailableError(message, status_code=_NOT_FOUND, detail=_message_of(response))
+        raise SpotifyUnavailableError(
+            message, upstream_status=_NOT_FOUND, upstream_detail=_message_of(response)
+        )
 
     def _backoff(self, attempt: int) -> float:
         """Exponential backoff for ``attempt``, capped."""
@@ -287,7 +294,7 @@ class SpotifyClient:
             try:
                 return min(float(raw), self.MAX_BACKOFF_SECONDS)
             except ValueError:
-                _logger.warning("could not parse Retry-After", extra={"retry_after_raw": raw})
+                _logger.warning("spotify_retry_after_unparseable", retry_after_raw=raw)
         return self._backoff(attempt)
 
     @staticmethod
