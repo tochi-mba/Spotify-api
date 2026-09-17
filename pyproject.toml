@@ -3,14 +3,13 @@ name = "spotify-api"
 version = "0.1.0"
 description = "A production-grade HTTP service for batch-resolving track metadata against the Spotify Web API."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "tochi-mba" }]
 keywords = ["spotify", "fastapi", "music", "metadata"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: FastAPI",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
@@ -105,7 +104,7 @@ exclude_also = [
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -202,7 +201,7 @@ known-first-party = ["spotify_api"]
 # mypy
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["src", "tests"]
 mypy_path = "src"
 strict = true

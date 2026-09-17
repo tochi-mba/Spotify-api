@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any
 
 from spotify_api.errors import (
     ConfirmationTimeoutError,
@@ -49,7 +49,7 @@ __all__ = [
 _logger = get_logger(__name__)
 
 #: A question asked of the player state: "is what I wanted true yet?"
-Predicate: TypeAlias = "Callable[[dict[str, Any]], bool]"
+type Predicate = "Callable[[dict[str, Any]], bool]"
 
 #: Seeking is not sample-accurate, and the track keeps playing while we poll.
 DEFAULT_SEEK_TOLERANCE_MS = 3000

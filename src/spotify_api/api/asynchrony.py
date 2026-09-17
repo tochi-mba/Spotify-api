@@ -46,7 +46,7 @@ AsyncFlag = Annotated[
 ]
 
 
-async def run_or_submit(
+async def run_or_submit[T](
     *,
     run_async: bool,
     operation: str,

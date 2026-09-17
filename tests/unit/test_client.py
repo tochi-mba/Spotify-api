@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
@@ -24,7 +24,7 @@ from tests.factories import make_settings
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-Handler: TypeAlias = "Callable[[httpx.Request], httpx.Response]"
+type Handler = "Callable[[httpx.Request], httpx.Response]"
 
 ITEM = LookupItem(name="Bohemian Rhapsody", artist="Queen")
 CONTEXT = UserContext(

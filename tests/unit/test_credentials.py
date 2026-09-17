@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
@@ -21,7 +21,7 @@ from tests.factories import TEST_SERVICE_TOKEN, make_settings
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-Handler: TypeAlias = "Callable[[httpx.Request], httpx.Response]"
+type Handler = "Callable[[httpx.Request], httpx.Response]"
 
 USER_TOKEN = "user-token-abc"
 PROFILE = "personal"
