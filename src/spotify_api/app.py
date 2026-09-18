@@ -37,7 +37,7 @@ from spotify_api.spotify.resolver import SpotifyTrackResolver
 from spotify_api.spotify.resources.player import PlayerResource
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
     from spotify_api.preferences import PreferenceSource
 
@@ -97,7 +97,7 @@ def create_app(
     configure_logging(level=resolved_settings.log_level, log_format=resolved_settings.log_format)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Own the shared HTTP client and the object graph built over it."""
         limits = httpx.Limits(
             max_connections=resolved_settings.max_concurrency * 2,
