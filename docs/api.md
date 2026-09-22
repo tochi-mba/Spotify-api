@@ -187,8 +187,9 @@ either way; the flag only chooses whether to wait for it.
 
 - `async=false` (default) — do the work, answer with the result.
 - `async=true` — `202` with `job_id`, `poll_url`, `Location: /v1/jobs/{job_id}`. Poll until
-  `status` is terminal. For playback, the job is not finished until the effect is confirmed
-  on the device.
+  `status` is terminal, or pass `wait_seconds` (0–60, default 0) on `GET /v1/jobs/{job_id}`
+  to long-poll until it is. For playback, the job is not finished until the effect is
+  confirmed on the device.
 
 ```json
 { "job_id": "0f8c1e2a-4b5d-4e6f-8a9b-0c1d2e3f4a5b", "status": "pending",
@@ -198,7 +199,7 @@ either way; the flag only chooses whether to wait for it.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/v1/jobs` | The caller's recent jobs, newest first. `?status=` and `?limit=` filter. |
-| `GET` | `/v1/jobs/{job_id}` | One job and, once it has one, its outcome |
+| `GET` | `/v1/jobs/{job_id}` | One job and, once it has one, its outcome. `?wait_seconds=` long-polls. |
 | `DELETE` | `/v1/jobs/{job_id}` | Cancel a running job. A finished job is returned unchanged. |
 
 A job belongs to the account whose verified token started it. Another account's job is `404`,

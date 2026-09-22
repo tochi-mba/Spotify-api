@@ -55,3 +55,17 @@ class JobStore(Protocol):
     async def record_attempt(self, job_id: str) -> None:
         """Note that the outcome was polled for once more."""
         ...
+
+    async def wait_for_terminal(
+        self,
+        job_id: str,
+        *,
+        account_id: str,
+        timeout: float,  # noqa: ASYNC109
+    ) -> Job:
+        """Return the job once it is terminal, or as it stands when ``timeout`` elapses.
+
+        Raises ``JobNotFoundError`` alike for an unknown job, an expired one, and one
+        that belongs to another account. Elapsing is a normal outcome, not an error.
+        """
+        ...

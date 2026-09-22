@@ -24,7 +24,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from spotify_api.errors import JobNotFoundError
-from spotify_api.jobs.models import Job, JobStatus
+from spotify_api.jobs.models import TERMINAL, Job, JobStatus
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,6 +48,7 @@ class InMemoryJobStore:
         self._clock = clock
         self._ttl = ttl_seconds
         self._jobs: dict[str, Job] = {}
+        self._settled: dict[str, asyncio.Event] = {}
         self._lock = asyncio.Lock()
 
     async def create(self, *, operation: str, account_id: str) -> Job:
@@ -62,6 +63,7 @@ class InMemoryJobStore:
         async with self._lock:
             self._reap()
             self._jobs[job.job_id] = job
+            self._settled[job.job_id] = asyncio.Event()
         return job
 
     async def get(self, job_id: str, *, account_id: str) -> Job:
@@ -125,6 +127,37 @@ class InMemoryJobStore:
                 return
             self._jobs[job_id] = job.model_copy(update={"attempts": job.attempts + 1})
 
+    async def wait_for_terminal(
+        self,
+        job_id: str,
+        *,
+        account_id: str,
+        timeout: float,  # noqa: ASYNC109
+    ) -> Job:
+        """Return the job once it is terminal, or as it stands when ``timeout`` elapses.
+
+        Elapsing is a normal outcome that returns the job as it stands, not a
+        cancellation, and the duration is the HTTP ``wait_seconds`` contract.
+        """
+        async with self._lock:
+            self._reap()
+            job = self._jobs.get(job_id)
+            if job is None or job.account_id != account_id:
+                message = "no such job; it may have expired"
+                raise JobNotFoundError(message, job_id=job_id)
+            event = self._settled.setdefault(job_id, asyncio.Event())
+            if job.status in TERMINAL:
+                return job
+
+        if timeout > 0:
+            try:
+                async with asyncio.timeout(timeout):
+                    await event.wait()
+            except TimeoutError:
+                pass
+
+        return await self.get(job_id, account_id=account_id)
+
     # -- internals ----------------------------------------------------------
 
     async def _update(self, job_id: str, **changes: Any) -> None:  # noqa: ANN401
@@ -134,7 +167,10 @@ class InMemoryJobStore:
             if job is None:
                 message = "no such job; it may have expired"
                 raise JobNotFoundError(message, job_id=job_id)
-            self._jobs[job_id] = job.model_copy(update=changes)
+            updated = job.model_copy(update=changes)
+            self._jobs[job_id] = updated
+            if updated.status in TERMINAL:
+                self._settled.setdefault(job_id, asyncio.Event()).set()
 
     def _reap(self) -> None:
         """Drop jobs older than the TTL. Called under the lock."""
@@ -142,3 +178,4 @@ class InMemoryJobStore:
         expired = [key for key, job in self._jobs.items() if job.created_at <= cutoff]
         for key in expired:
             del self._jobs[key]
+            self._settled.pop(key, asyncio.Event()).set()

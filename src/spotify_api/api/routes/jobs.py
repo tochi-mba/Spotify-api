@@ -22,6 +22,8 @@ __all__ = ["router"]
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+MAX_WAIT_SECONDS = 60.0
+
 _UNAUTHORIZED: dict[int | str, dict[str, Any]] = {
     status.HTTP_401_UNAUTHORIZED: {
         "model": Problem,
@@ -67,16 +69,38 @@ async def list_jobs(
     response_model=JobResponse,
     summary="Get a job's status and result",
     description=(
-        "Poll this after a call made with `?async=true`. While `status` is `pending` "
-        "or `running` the work is still going; `succeeded` carries the body the "
-        "synchronous call would have returned. Only the account that started the job "
-        "can see it."
+        "Poll this after a call made with `?async=true`, or pass `wait_seconds` to hold "
+        "the request open until the job finishes -- up to 60 seconds -- so a caller "
+        "does not have to poll in a loop. While `status` is `pending` or `running` the "
+        "work is still going; `succeeded` carries the body the synchronous call would "
+        "have returned. Only the account that started the job can see it."
     ),
     responses=_NOT_FOUND,
 )
-async def get_job(job_id: str, store: JobStoreDep, context: UserContextDep) -> JobResponse:
-    """Return one of the caller's jobs."""
-    return JobResponse.of(await store.get(job_id, account_id=context.account_id))
+async def get_job(
+    job_id: str,
+    store: JobStoreDep,
+    context: UserContextDep,
+    wait_seconds: Annotated[
+        float,
+        Query(
+            ge=0,
+            le=MAX_WAIT_SECONDS,
+            description=(
+                "Seconds to wait for the job to finish before answering. 0 (the "
+                "default) answers straight away."
+            ),
+        ),
+    ] = 0.0,
+) -> JobResponse:
+    """Return one of the caller's jobs, optionally waiting for it to settle first."""
+    if wait_seconds > 0:
+        job = await store.wait_for_terminal(
+            job_id, account_id=context.account_id, timeout=wait_seconds
+        )
+    else:
+        job = await store.get(job_id, account_id=context.account_id)
+    return JobResponse.of(job)
 
 
 @router.delete(

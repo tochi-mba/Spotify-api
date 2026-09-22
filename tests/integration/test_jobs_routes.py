@@ -94,6 +94,26 @@ async def test_an_unexpected_failure_does_not_leak_its_detail(
     assert "connection pool corrupted" not in (await client.get(accepted["poll_url"])).text
 
 
+async def test_an_overlong_wait_is_refused(client: httpx.AsyncClient) -> None:
+    accepted = await submit(client)
+    response = await client.get(accepted["poll_url"], params={"wait_seconds": 3600})
+    assert response.status_code == 422
+
+
+async def test_wait_seconds_returns_when_the_job_finishes(
+    client: httpx.AsyncClient, resolver: FakeResolver
+) -> None:
+    release = asyncio.Event()
+    resolver.gate = release
+    accepted = await submit(client)
+    await settle()
+    waiter = asyncio.create_task(client.get(accepted["poll_url"], params={"wait_seconds": 5}))
+    await asyncio.sleep(0)
+    release.set()
+    body = (await waiter).json()
+    assert body["status"] == "succeeded"
+
+
 async def test_an_unknown_job_is_a_404_problem(
     client: httpx.AsyncClient,
 ) -> None:

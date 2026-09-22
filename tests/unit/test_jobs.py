@@ -359,3 +359,78 @@ async def test_cancelling_a_job_this_runner_never_started_still_records_it(
 
 def test_the_in_memory_store_satisfies_the_seam(store: InMemoryJobStore) -> None:
     assert isinstance(store, JobStore)
+
+
+async def test_a_job_that_is_already_finished_returns_at_once(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+    await store.finish(job.job_id, result={"ok": True})
+
+    settled = await store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=30)
+
+    assert settled.status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_returns_as_soon_as_the_job_settles(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+
+    async def finish() -> None:
+        await store.finish(job.job_id, result={"ok": True})
+
+    waiter = asyncio.create_task(store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=30))
+    await asyncio.sleep(0)
+    await finish()
+
+    assert (await waiter).status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_gives_up_and_returns_the_job_as_it_stands(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+
+    unsettled = await store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=0.01)
+
+    assert unsettled.status is JobStatus.PENDING
+
+
+async def test_a_zero_timeout_does_not_wait(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+
+    assert (
+        await store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=0)
+    ).status is JobStatus.PENDING
+
+
+async def test_waiting_on_an_unknown_job_is_not_found(store: InMemoryJobStore) -> None:
+    with pytest.raises(JobNotFoundError, match="no such job"):
+        await store.wait_for_terminal("nope", account_id=ALICE, timeout=1)
+
+
+async def test_another_account_cannot_wait_on_a_job(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+
+    with pytest.raises(JobNotFoundError, match="no such job"):
+        await store.wait_for_terminal(job.job_id, account_id=BOB, timeout=1)
+
+
+async def test_several_waiters_are_all_released(store: InMemoryJobStore) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+    waiters = [
+        asyncio.create_task(store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=30))
+        for _ in range(3)
+    ]
+    await asyncio.sleep(0)
+    await store.finish(job.job_id, result={"ok": True})
+
+    assert all(result.status is JobStatus.SUCCEEDED for result in await asyncio.gather(*waiters))
+
+
+async def test_waiters_on_a_reaped_job_are_released(
+    store: InMemoryJobStore, clock: FakeClock
+) -> None:
+    job = await store.create(operation="op", account_id=ALICE)
+    waiter = asyncio.create_task(store.wait_for_terminal(job.job_id, account_id=ALICE, timeout=5))
+    await asyncio.sleep(0)
+    clock.advance(3601)
+    with pytest.raises(JobNotFoundError):
+        await store.get(job.job_id, account_id=ALICE)
+    with pytest.raises(JobNotFoundError):
+        await waiter
