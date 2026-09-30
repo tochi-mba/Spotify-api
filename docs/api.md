@@ -203,9 +203,22 @@ either way; the flag only chooses whether to wait for it.
   "operation": "player.play", "poll_url": "/v1/jobs/0f8c1e2a-4b5d-4e6f-8a9b-0c1d2e3f4a5b" }
 ```
 
+A job, as `GET /v1/jobs/{job_id}` and `DELETE` return it:
+
+```json
+{ "job_id": "0f8c1e2a-4b5d-4e6f-8a9b-0c1d2e3f4a5b", "operation": "player.play",
+  "status": "succeeded", "result": { "is_playing": true, "...": "..." },
+  "error": null, "error_type": null, "attempts": 3, "duration_seconds": 1.42 }
+```
+
+`status` is `pending`, `running`, `succeeded`, `failed` or `cancelled`. `result` is set only
+on `succeeded`; `error` and `error_type` (the problem type with underscores, such as
+`no_active_device`, or `internal_error` with an opaque message) only on failure. `attempts` counts the confirmation polls a playback
+command took. `GET /v1/jobs` answers `{ "count": ..., "jobs": [...] }`.
+
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/v1/jobs` | The caller's recent jobs, newest first. `?status=` and `?limit=` filter. |
+| `GET` | `/v1/jobs` | The caller's recent jobs, newest first. `?status=` filters; `?limit=` is 1–200, default 50. |
 | `GET` | `/v1/jobs/{job_id}` | One job and, once it has one, its outcome. `?wait_seconds=` long-polls. |
 | `DELETE` | `/v1/jobs/{job_id}` | Cancel a running job. A finished job is returned unchanged. |
 
