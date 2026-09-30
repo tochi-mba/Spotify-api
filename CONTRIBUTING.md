@@ -40,7 +40,8 @@ done. One logical change per commit.
 ## Things that will get a change sent back
 
 - Coverage lowered, or `# pragma: no cover` used to dodge the gate.
-- A route importing `SpotifyClient` instead of depending on `TrackResolver`.
+- A route importing `SpotifyClient` instead of depending on `TrackResolver`,
+  `PlayerResource` or another alias in `api/dependencies.py`.
 - Validation rules in a handler that belong in a model.
 - An exception escaping per-item resolution and failing a whole batch.
 - A secret that can reach a log line or a response body.
