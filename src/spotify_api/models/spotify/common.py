@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = ["ExternalIds", "ExternalUrls", "Followers", "Image", "Restrictions", "SpotifyModel"]
@@ -53,28 +51,3 @@ class Restrictions(SpotifyModel):
     """Why content is unavailable, when it is."""
 
     reason: str | None = Field(default=None, description="market, product or explicit.")
-
-
-class Paging(SpotifyModel):
-    """Spotify's standard offset-paged envelope."""
-
-    href: str | None = Field(default=None, description="URL of this page.")
-    limit: int = Field(default=20, description="Page size that was applied.")
-    offset: int = Field(default=0, description="Index of the first item.")
-    total: int = Field(default=0, description="Items available in total.")
-    next: str | None = Field(default=None, description="URL of the next page, if any.")
-    previous: str | None = Field(default=None, description="URL of the previous page, if any.")
-    items: list[Any] = Field(default_factory=list, description="This page's items.")
-
-
-class CursorPaging(SpotifyModel):
-    """Spotify's cursor-paged envelope, used where offsets make no sense."""
-
-    href: str | None = Field(default=None, description="URL of this page.")
-    limit: int = Field(default=20, description="Page size that was applied.")
-    total: int | None = Field(default=None, description="Items available, where known.")
-    next: str | None = Field(default=None, description="URL of the next page, if any.")
-    cursors: dict[str, Any] | None = Field(
-        default=None, description="Opaque markers for the next page."
-    )
-    items: list[Any] = Field(default_factory=list, description="This page's items.")
