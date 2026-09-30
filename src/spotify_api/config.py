@@ -27,7 +27,7 @@ from keyring_client import ExactAudience, check_service_token
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from spotify_api import USER_AUDIENCE
+from spotify_api import SERVICE_NAME
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -100,10 +100,10 @@ class Settings(BaseSettings):
         description="The iss every user token must carry. Must equal keyring's KEYRING_ISSUER.",
     )
     keyring_audience: str = Field(
-        default=USER_AUDIENCE,
+        default=SERVICE_NAME,
         description=(
-            "The provider-neutral aud every user token must carry. Every implementation of "
-            "the music contract accepts the same audience."
+            "The aud every user token must carry. Keyring's internal endpoint requires it to "
+            "equal this service's name in KEYRING_SERVICE_TOKENS, so change both or neither."
         ),
     )
     keyring_default_profile: str = Field(
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
         default=None,
         description=(
             "This service's entry in settings-api's SETTINGS_API_SERVICES. At least 32 "
-            "characters. Its grant there needs audience_prefix music-api: settings-api is "
+            "characters. Its grant there needs audience_prefix spotify-api: settings-api is "
             "shown the same user token keyring minted."
         ),
     )

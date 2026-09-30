@@ -88,7 +88,7 @@ bearer_scheme = HTTPBearer(
     auto_error=False,
     description=(
         "A short-lived RS256 token from keyring, minted for this service with "
-        '`POST /v1/auth/service-token {"audience": "music-api"}`. Required on every `/v1` '
+        '`POST /v1/auth/service-token {"audience": "spotify-api"}`. Required on every `/v1` '
         "route. The `X-Keyring-User-Token` header is still accepted for one release."
     ),
 )
