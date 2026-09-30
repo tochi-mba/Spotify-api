@@ -281,3 +281,18 @@ def test_the_settings_api_variable_names_are_recognised() -> None:
     names = known_env_names()
     assert "SPOTIFY_API_SETTINGS_API_BASE_URL" in names
     assert "SPOTIFY_API_SETTINGS_API_TOKEN" in names
+
+
+@pytest.mark.usefixtures("base_env")
+def test_the_audience_a_user_token_carries_is_this_service_s_own_name() -> None:
+    """A user token's audience is this service's own name, and nothing shared.
+
+    The bug, named: the audience was renamed to a "provider-neutral" music-api so a second
+    music service could accept the same tokens. Keyring's credential route checks that a user
+    token's audience is exactly the calling service's name in KEYRING_SERVICE_TOKENS, so every
+    Spotify credential read was refused. The audience is this service's name, and a second
+    implementation is minted tokens for its own.
+    """
+    from spotify_api import SERVICE_NAME  # noqa: PLC0415 -- the one name both sides use
+
+    assert Settings(_env_file=None).keyring_audience == SERVICE_NAME  # type: ignore[call-arg]
