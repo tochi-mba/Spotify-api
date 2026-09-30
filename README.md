@@ -13,7 +13,7 @@ every request carries the caller's keyring token, this service verifies it
 locally, and [keyring](https://github.com/tochi-mba/Keyring-api) hands over the
 headers to attach for that person's own Spotify connection.
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](#testing)
 
 ---
