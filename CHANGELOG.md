@@ -20,6 +20,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** credentials come from keyring. This service holds no Spotify credential
+  and no longer uses Client Credentials: `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
+  are replaced by keyring's base URL and this service's token there (now
+  `SPOTIFY_API_KEYRING_BASE_URL` and `SPOTIFY_API_KEYRING_SERVICE_TOKEN`), and every route
+  but the health probes needs the caller's keyring user token. The Spotify credential
+  keyring hands back is cached per profile under a hash of the user token, so a batch
+  costs one keyring call, and a `401` from Spotify drops it so keyring resolves again.
+  Keyring refusing or failing answers `credential_unavailable` or `keyring_unavailable`
+  for the whole request rather than an error per item.
 - **Breaking:** the floor is now **Python 3.12** (CI runs 3.12 and 3.13).
   `.python-version`, `requires-python`, ruff's `target-version`, mypy's `python_version`,
   the Docker base image and the pre-commit interpreter all moved together, and `uv.lock`
@@ -57,6 +66,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The Player API. Reads: `GET /v1/player` (playback state), `/v1/player/devices`,
+  `/v1/player/currently-playing`, `/v1/player/queue` and `/v1/player/recently-played`.
+  Commands: `POST /v1/player/play`, `pause`, `next`, `previous`, `seek`, `volume`,
+  `shuffle`, `repeat`, `transfer` and `queue`. Spotify answers a command `204`, which
+  means accepted, not done, so each command polls the player until its effect is seen
+  (for `play` with `uris`, that exact track playing) and answers with that state; after
+  `SPOTIFY_API_CONFIRM_TIMEOUT_SECONDS` (15) it fails `504 confirmation_timeout` with the
+  last state seen. Queueing is the exception: it leaves playback alone, so Spotify's
+  acceptance is all there is. A free account answers `403 premium_required`, and no
+  device to play on `409 no_active_device`.
+- Background jobs. `?async=true` on `POST /v1/lookup` and every player command answers
+  `202` with a job id and a `Location` header, and runs the same work in the background.
+  `GET /v1/jobs`, `GET /v1/jobs/{job_id}` and `DELETE /v1/jobs/{job_id}` list, poll and
+  cancel them. Jobs live in memory, are lost on restart, and are dropped
+  `SPOTIFY_API_JOB_TTL_SECONDS` (an hour) after they were created.
+- `GET /v1/jobs/{job_id}?wait_seconds=` (0-60) holds the request open until the job
+  finishes, so a caller need not poll in a loop.
+- `docs/mcp.md`: what a model may call through this service and how results are framed.
 - `SPOTIFY_API_KEYRING_ISSUER`, `SPOTIFY_API_KEYRING_AUDIENCE`, `SPOTIFY_API_JWKS_CACHE_SECONDS`
   and `SPOTIFY_API_JWKS_MIN_REFETCH_SECONDS`.
 - import-linter contracts: models and jobs must not import the API layer; `keyring_client`
