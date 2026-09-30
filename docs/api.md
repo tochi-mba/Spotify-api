@@ -174,17 +174,21 @@ signal.
 | `POST` | `/v1/player/transfer` | Move playback to another device |
 | `POST` | `/v1/player/queue` | Queue an item without interrupting playback |
 
-`GET /v1/player` and `/currently-playing` take an optional `market`.
-`/recently-played` takes `limit` (1–50, default 20) and `after` or `before`, each a Unix time
-in milliseconds, passed through to Spotify, which accepts only one of the two. Commands take an optional `device_id`: in the query for
-`/pause`, `/next` and `/previous`, which have no body, and in the body for the rest.
-`/transfer` requires it. Bodies are validated like lookup's: `volume_percent` is 0–100,
-`position_ms` is at least 0, `/repeat` takes `state` of `off`, `track` or `context`,
-`/shuffle` takes a boolean `state`, `/queue` takes a `uri`, and `/play` takes at most one
-of `uris` (up to 750) or `context_uri`, with an optional `offset` and `position_ms`. No active device is `409`, not `404` — the player exists and is in
-the wrong state. Playback control on a free account is `403` `premium-required`. A command
-Spotify accepted whose effect never became observable is `504`, with the last seen player
-state in `details.observed`.
+`GET /v1/player` and `/currently-playing` take an optional `market`. `/recently-played`
+takes `limit` (1–50, default 20) and `after` or `before`, each a Unix time in milliseconds,
+passed through to Spotify, which accepts only one of the two.
+
+Commands take an optional `device_id`: in the query for `/pause`, `/next` and `/previous`,
+which have no body, and in the body for the rest; `/transfer` requires it. Bodies are
+validated like lookup's: `volume_percent` is 0–100, `position_ms` is at least 0, `/repeat`
+takes `state` of `off`, `track` or `context`, `/shuffle` takes a boolean `state`, `/queue`
+takes a `uri`, and `/play` takes at most one of `uris` (up to 750) or `context_uri`, with an
+optional `offset` and `position_ms`.
+
+No active device is `409`, not `404` — the player exists and is in the wrong state. Playback
+control on a free account is `403` `premium-required`. A command Spotify accepted whose
+effect never became observable is `504`, with the last seen player state in
+`details.observed`.
 
 ## Background jobs
 
