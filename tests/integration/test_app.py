@@ -158,7 +158,7 @@ def test_the_openapi_schema_documents_every_route(app: FastAPI) -> None:
     # client sends it, and the header it used to travel in is still documented -- as deprecated.
     scheme = schema["components"]["securitySchemes"]["HTTPBearer"]
     assert (scheme["type"], scheme["scheme"]) == ("http", "bearer")
-    assert "music-api" in scheme["description"]
+    assert "spotify-api" in scheme["description"]
     assert {"HTTPBearer": []} in lookup["security"]
     [legacy] = [p for p in lookup["parameters"] if p["name"] == "X-Keyring-User-Token"]
     assert legacy["in"] == "header"
