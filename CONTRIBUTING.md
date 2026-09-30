@@ -35,8 +35,7 @@ done. One logical change per commit.
 - Describe the behaviour change, not the diff.
 - Note any new configuration and confirm it is in the README table and
   `.env.example`.
-- Confirm `make check` passes locally; CI runs the same thing on 3.11, 3.12 and
-  3.13.
+- Confirm `make check` passes locally; CI runs the same thing on 3.12 and 3.13.
 
 ## Things that will get a change sent back
 
