@@ -22,8 +22,8 @@ headers to attach for that person's own Spotify connection.
 
 Music metadata arrives messy. You have a track title, maybe an artist, maybe a
 year — scraped from a spreadsheet, a playlist export, or a user typing. This
-service turns that into canonical Spotify data: IDs, URIs, ISRCs, album art
-context, duration, popularity.
+service turns that into canonical Spotify data: IDs, URIs, ISRCs, album and
+release date, duration, popularity.
 
 It is designed to sit behind something else — an MCP server, a batch job, a
 frontend — so the contract is deliberately boring and stable, and the OpenAPI
@@ -318,6 +318,7 @@ docker run --rm -p 8007:8007 --env-file .env spotify-api
 - [AGENTS.md](AGENTS.md) — operating manual for contributors and agents
 - [docs/architecture.md](docs/architecture.md) — layers and request lifecycle
 - [docs/api.md](docs/api.md) — full endpoint reference
+- [docs/mcp.md](docs/mcp.md) — fronting the API as MCP tools
 - [docs/operations.md](docs/operations.md) — environment, readiness, keyring registration
 - [docs/testing.md](docs/testing.md) — test taxonomy and fixtures
 - [docs/adr/](docs/adr/) — architecture decision records

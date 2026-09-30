@@ -27,7 +27,8 @@ first commit, before any feature code existed.
 ## Consequences
 
 - The exclusion list is fixed and lives in `pyproject.toml`: `TYPE_CHECKING`
-  blocks, protocol bodies, `NotImplementedError`, and the `__main__` guard.
+  blocks, protocol bodies, `@overload`, `NotImplementedError`, and the `__main__`
+  guard.
   Adding to it requires a reason in the commit message.
 - `# pragma: no cover` must never be used to dodge the gate. If a line is truly
   unreachable, delete it.
