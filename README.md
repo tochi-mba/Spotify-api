@@ -289,8 +289,10 @@ default profile; see [docs/operations.md](docs/operations.md#per-person-settings
 - **Bounded concurrency.** Fifty simultaneous searches would earn an immediate
   429; a semaphore keeps us inside Spotify's tolerance while staying far faster
   than serial resolution.
-- **Spotify stays behind a seam.** Routes depend on a `TrackResolver` protocol,
-  so nothing outside `spotify/` knows Spotify exists.
+- **Spotify stays behind a seam.** The lookup route depends on a `TrackResolver`
+  protocol and the player routes on `PlayerResource`, so nothing outside `spotify/`
+  calls Spotify. The player's answers are Spotify's own objects, typed in
+  `models/spotify/`.
 
 ## Testing
 

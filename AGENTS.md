@@ -9,12 +9,15 @@ where it says **must**, CI enforces it.
 
 ## 1. What this service is
 
-An HTTP API that resolves batches of loosely-specified tracks against the
-Spotify Web API. A caller submits an array of `{ name, artist?, album?, year? }`
-and receives one result per item, in order, each with its own status.
+An HTTP API over one person's Spotify account, and the family's implementation
+of the music contract. It does two things:
 
-It is intentionally small and does one thing. Resist the urge to grow it into a
-general Spotify proxy.
+- **Lookup.** A caller submits an array of `{ name, artist?, album?, year? }` and
+  receives one result per item, in order, each with its own status.
+- **Playback.** It reads the player, and issues commands that answer only once
+  their effect has been seen on the device.
+
+It is intentionally small. Resist the urge to grow it into a general Spotify proxy.
 
 ## 2. The four invariants
 
@@ -26,11 +29,15 @@ as a result with `status="error"`. A new failure mode means a new branch there,
 never an exception escaping to the route.
 
 **2.2 — Spotify stays behind the seam.** Only `src/spotify_api/spotify/` may
-know a Spotify URL or understand Spotify's JSON. Routes depend on the
-`TrackResolver` protocol in `spotify/protocols.py`. `httpx` is also forbidden
-from `api/` and `models/` (enforced by import-linter); the composition root,
-the credentials adapter and the Spotify client are the three places that open
-sockets. If you find yourself importing `SpotifyClient` into a route, stop.
+know a Spotify URL or make a call to Spotify. The lookup route depends on the
+`TrackResolver` protocol in `spotify/protocols.py`; the player routes depend on
+`PlayerResource` in `spotify/resources/player.py` through `PlayerDep`. The one
+exception to "nobody else understands Spotify's JSON" is `models/spotify/`: typed
+models of Spotify's own player objects, which the player routes return as they
+are, so they are part of the public contract. `httpx` is forbidden from `api/`
+and `models/` (enforced by import-linter); the composition root, the credentials
+adapter and the Spotify client are the three places that open sockets. If you
+find yourself importing `SpotifyClient` into a route, stop.
 
 **2.3 — The contract lives in the models.** Every rule a caller must satisfy
 belongs in `models/requests.py`, not in a handler. That way it is enforced once
@@ -63,8 +70,10 @@ the test comes first, you watch it fail, and you make it pass.
 This is not ceremony. Two real bugs in this codebase's short history were found
 by tests written before the fix, and would have shipped otherwise:
 
-- `JsonFormatter` resolved the request id at *format* time, so any deferred
-  formatting lost it. The id is now stamped onto the `LogRecord` at creation.
+- The JSON log formatter this service had before structlog resolved the request
+  id at *format* time, so any deferred formatting lost it. The fix was to stamp
+  the id on the record when it is created, which is what
+  `logging.add_request_id` still does.
 - A `401` with `max_retries=0` fell out of the retry loop and surfaced as
   `SpotifyRateLimitError`. Re-authentication is now separate from the budget.
 
@@ -73,7 +82,8 @@ asked the awkward question.
 
 ## 4. The gate
 
-All five must pass. CI runs exactly this.
+All five must pass. CI runs these, and also builds the image, audits
+dependencies and scores the repository against the family standard.
 
 ```bash
 make check          # or, individually:
@@ -107,8 +117,10 @@ If a line is genuinely unreachable, delete it.
 
 ```
 src/spotify_api/
+├── __main__.py       `python -m spotify_api` / `spotify-api`: uvicorn on HOST:PORT
 ├── app.py            create_app() factory; composition root; owns ONE httpx client
 ├── config.py         pydantic-settings, SPOTIFY_API_ prefix; unknown names refused
+├── preferences.py    per-person settings from settings-api (off unless configured)
 ├── logging.py        structlog; request id, account id, redact_secrets
 ├── context.py        request-id and account-id contextvars
 ├── errors.py         domain exception hierarchy (no HTTP)
@@ -120,14 +132,18 @@ src/spotify_api/
 │   ├── router.py         health at root, everything else under /v1
 │   └── routes/           one module per resource
 ├── models/           the public contract, request and response
+│   └── spotify/          Spotify's own player objects, returned as they are
 ├── credentials/      keyring: the headers to attach for one user, cached to expiry
-├── jobs/             background jobs; each belongs to the account that started it
-└── spotify/          the adapter. Nothing outside here knows Spotify exists.
-    ├── protocols.py      the seam routes depend on
-    ├── client.py         the retry ladder
+├── jobs/             background jobs and playback confirmation; each job
+│                     belongs to the account that started it
+└── spotify/          the adapter. Nothing outside here calls Spotify.
+    ├── protocols.py      TrackResolver, the seam the lookup route depends on
+    ├── client.py         SpotifyClient.request: the retry ladder, for every call
     ├── query.py          Spotify field filters
     ├── mappers.py        raw JSON -> models, defensively
-    └── resolver.py       bounded-concurrency batch resolution
+    ├── resolver.py       bounded-concurrency batch resolution
+    └── resources/
+        └── player.py     PlayerResource: player reads and commands
 
 tests/
 ├── unit/         one module per source module, no I/O
@@ -135,7 +151,8 @@ tests/
 ├── contract/     assumptions about Spotify's response shape
 ├── live/         real API. Deselected by default, skipped without credentials.
 ├── fixtures/     recorded Spotify payloads
-└── factories.py  make_settings() — always build settings through this
+└── factories.py  make_settings() — always build settings through this;
+                  user_token() mints a real signed token for route tests
 ```
 
 ## 7. Recipes
@@ -154,12 +171,15 @@ tests/
 2. Add the handler under `api/routes/`, with `summary`, `description` and a
    `responses` map for every non-200 it can produce.
 3. Include it in `api/router.py` — under `api_router` unless it is a probe.
-4. Depend on `ResolverDep`/`SettingsDep`, never on a concrete class.
+4. Depend on the aliases in `api/dependencies.py` (`ResolverDep`, `PlayerDep`,
+   `SettingsDep`, `UserContextDep` and the rest). Never construct a client in a
+   route or import one.
 
 ### Add a Spotify endpoint
 
-1. Extend `SpotifyClient` with a method that goes through
-   `_get_with_retries`. Do not hand-roll a second retry ladder.
+1. Call it through `SpotifyClient.request`, which owns the retry ladder. Do not
+   hand-roll a second one. A user-scoped group of endpoints belongs in
+   `spotify/resources/`, the way `PlayerResource` does it.
 2. Add a mapper, and a recorded fixture in `tests/fixtures/`.
 3. Add contract tests pinning the shape you now depend on.
 4. If routes need it, extend `TrackResolver` — or add a sibling protocol.
