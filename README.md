@@ -252,12 +252,18 @@ it had a prefix — the error names the variable that replaced it.
 | `SPOTIFY_API_CONFIRM_POLL_INTERVAL_SECONDS` | `0.5` | |
 | `SPOTIFY_API_JOB_TTL_SECONDS` | `3600` | How long a finished job stays readable. |
 | `SPOTIFY_API_DEFAULT_MARKET` | unset | Applied when a request omits `market`. |
+| `SPOTIFY_API_SETTINGS_API_BASE_URL` | unset | Where settings-api is. Unset, everybody shares this configuration. |
+| `SPOTIFY_API_SETTINGS_API_TOKEN` | unset | This service's entry in settings-api's `SETTINGS_API_SERVICES`. Set both or neither. |
+| `SPOTIFY_API_HOST` | `127.0.0.1` | Bind address for `uv run spotify-api`. The image sets `0.0.0.0`. |
+| `SPOTIFY_API_PORT` | `8007` | Bind port for `uv run spotify-api`. `make run` always uses 8007. |
 | `SPOTIFY_API_ENVIRONMENT` | `development` | `development`/`test`/`staging`/`production`. |
 | `SPOTIFY_API_LOG_LEVEL` | `INFO` | |
 | `SPOTIFY_API_LOG_FORMAT` | `json` | `json` or `console`. |
 
 Missing keyring configuration is a **startup failure**, by design — better than
-running misconfigured.
+running misconfigured. With settings-api configured, each person's `spotify` settings
+can lower the batch cap and the confirm timeout, and choose a default market and a
+default profile; see [docs/operations.md](docs/operations.md#per-person-settings-settings-api).
 
 ## Design notes
 
