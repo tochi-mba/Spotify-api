@@ -8,8 +8,10 @@ uv run spotify-api                         # production entry point
 GITHUB_TOKEN="$(gh auth token)" docker build --secret id=github_token,env=GITHUB_TOKEN -t spotify-api:local . && docker run --rm -p 8007:8007 --env-file .env spotify-api:local
 ```
 
-The process binds `SPOTIFY_API_HOST:SPOTIFY_API_PORT`, `127.0.0.1:8007` by default; the image sets the host to `0.0.0.0`. Change the bind in a
-reverse proxy, not here.
+`uv run spotify-api` (and the image, which runs `python -m spotify_api`) binds
+`SPOTIFY_API_HOST:SPOTIFY_API_PORT`, `127.0.0.1:8007` by default; the image sets the host to
+`0.0.0.0`. `make run` ignores both and serves on `127.0.0.1:8007` with reload. Keep the
+family port and put a reverse proxy in front rather than moving it.
 
 `GET /healthy` returns `200` from process state alone. Point a liveness probe at it. It is one
 of two routes that do not need a token; the other is `/ready`.
@@ -87,6 +89,31 @@ and `KEYRING_AUDIENCE`.
 | `SPOTIFY_API_JOB_TTL_SECONDS` | `3600` | How long a finished job stays readable. Jobs are in-memory. `>0`, `≤86400`. |
 | `SPOTIFY_API_DEFAULT_MARKET` | unset | ISO 3166-1 alpha-2 applied when a request omits `market`. |
 
+### Serving
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `SPOTIFY_API_HOST` | `127.0.0.1` | Bind address for `uv run spotify-api` and the image. The image sets `0.0.0.0`. |
+| `SPOTIFY_API_PORT` | `8007` | Bind port, the family's assignment for this service. `1–65535`. |
+
+### Per-person settings (settings-api)
+
+Unset, everybody gets the configuration on this page, which is how a deployment ships. Set
+both variables and each request reads that person's `spotify` settings: their default
+market, lookup batch cap, confirm timeout, and which profile they mean when they name none.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `SPOTIFY_API_SETTINGS_API_BASE_URL` | unset | Where settings-api is. Blank or unset is off. |
+| `SPOTIFY_API_SETTINGS_API_TOKEN` | unset | This service's entry in settings-api's `SETTINGS_API_SERVICES`. At least 32 characters. Its grant there needs `audience_prefix` `spotify-api`: settings-api is shown the same user token keyring minted. |
+
+**The pair must be set together**; either one alone is a startup error. A person may lower
+`max_batch_size` and `confirm_timeout_seconds`, never raise them above this configuration.
+Nothing is fetched at startup. During a settings-api outage the other settings fall back to
+this configuration, but `default_profile` refuses rather than guess, and fails only a
+request that named no profile, with `503` `preferences-unavailable`. settings-api answering
+`401` or `403` fails the request too, because it means this service is misconfigured there.
+
 ### Observability
 
 | Variable | Default | Notes |
@@ -146,7 +173,9 @@ What remains your problem:
 | Symptom | Likely cause |
 | --- | --- |
 | Startup fails with "unrecognised configuration" | A typo under `SPOTIFY_API_`, or a distinctive old name (`KEYRING_BASE_URL`, `SPOTIFY_API_BASE_URL`, …). The message names the replacement. |
-| Startup fails with a short service token | `SPOTIFY_API_KEYRING_SERVICE_TOKEN` is under 32 characters, the rule keyring itself enforces. |
+| Startup fails with a short service token | `SPOTIFY_API_KEYRING_SERVICE_TOKEN` or `SPOTIFY_API_SETTINGS_API_TOKEN` is under 32 characters, the rule keyring and settings-api enforce. |
+| Startup fails: settings-api URL and token must be set together | Half a settings-api configuration. Set both or neither. |
+| `503` `preferences-unavailable` | settings-api refused this service, or could not be reached for a request that named no profile. Send `X-Keyring-Profile`, or check this service's grant in settings-api. |
 | Every request answers `401` on a deployment that worked | `KEYRING_ISSUER` or `KEYRING_AUDIENCE` no longer matches keyring. Both fail closed and say nothing more. Also: callers still sending only `X-Keyring-User-Token` after that header is removed. |
 | `/ready` is `503` | keyring's JWKS document cannot be fetched. Check the base URL and that keyring is up. Cached keys survive an outage; a cold start does not. |
 | Lookups answer `502` `credential-unavailable` | That account has not connected Spotify on that profile, or the grant was revoked. Reconnect it in keyring. |
