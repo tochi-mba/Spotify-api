@@ -25,7 +25,7 @@ will immediately ask why it is not.
 
 This service holds no Spotify credential. After the token is checked it asks keyring for
 the headers to attach, and those headers never enter a response, a job result, or a log.
-A wrapper that echoed a `ResolvedAuth` into a tool result would undo that.
+A wrapper that echoed resolved credential headers into a tool result would undo that.
 
 Another account's job is 404, identical to one that never existed. Do not paper over that
 with a 403: a 403 confirms the job exists.

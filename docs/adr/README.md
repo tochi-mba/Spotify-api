@@ -8,7 +8,7 @@ one that replaced it says so.
 | ADR | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-fastapi-and-pydantic.md) | FastAPI and pydantic, with the schema as the contract | Accepted |
-| [0002](0002-client-credentials.md) | Spotify credentials come from the client-credentials flow | **Superseded** — this service now holds no Spotify credential at all. Each caller's keyring token is verified locally and keyring supplies the headers, per request, per person. See [docs/keyring.md](../keyring.md). |
+| [0002](0002-client-credentials.md) | Spotify credentials come from the client-credentials flow | **Superseded** — this service now holds no Spotify credential at all. Each caller's keyring token is verified locally and keyring supplies the headers, per request, per person. See [architecture.md](../architecture.md#who-is-asking) and [operations.md](../operations.md#registering-with-keyring). |
 | [0003](0003-partial-success.md) | A batch reports per-item outcomes rather than failing whole | Accepted |
 | [0004](0004-full-coverage-gate.md) | 100% branch coverage is a gate, not a target | Accepted |
 

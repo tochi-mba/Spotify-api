@@ -21,8 +21,10 @@ negotiable.
 | `tests/live/` | the real Spotify API | nothing | slow, opt-in |
 
 The end-to-end module is the interesting one: it builds the *production* object
-graph — route, resolver, client, token provider, mappers — and fakes only the
-network, via `create_app(transport=httpx.MockTransport(...))`. Everything else
+graph — route, resolver, client, credential provider, mappers — and fakes only the
+network, via `create_app(transport=httpx.MockTransport(...))`: one fake answers for both
+Spotify and keyring. Keyring's published keys come through it too, because
+`keyring_transport` defaults to `transport`. Everything else
 injects a fake resolver, so it proves the HTTP contract without proving the
 wiring; this proves the wiring.
 
@@ -31,7 +33,7 @@ wiring; this proves the wiring.
 ```bash
 uv run pytest                          # everything except live
 uv run pytest tests/unit -q            # one suite
-uv run pytest -k stampede              # one behaviour
+uv run pytest -k exactly_one_keyring   # one behaviour
 uv run pytest -m live                  # the real API (needs credentials)
 make test-live                         # same, via the Makefile
 make cov                               # HTML report in htmlcov/
@@ -44,7 +46,7 @@ seen keyring or a Spotify credential.
 
 ## Conventions
 
-- **Test names are sentences.** `test_concurrent_callers_trigger_exactly_one_token_fetch`
+- **Test names are sentences.** `test_concurrent_callers_trigger_exactly_one_keyring_call`
   tells you what broke without opening the file.
 - **Build settings with `make_settings()`** from `tests/factories.py`. It supplies
   dummy credentials and disables `.env` loading, so tests never depend on the
@@ -55,13 +57,13 @@ seen keyring or a Spotify credential.
   deployment: every stateful route needs a test that one account cannot see
   another's data.
 - **Fake at the transport, not the library.** `httpx.MockTransport` exercises the
-  real request-building and response-parsing code. Patching `SpotifyClient.search`
+  real request-building and response-parsing code. Patching `SpotifyClient.search_track`
   would test the mock instead.
 - **Inject time and sleep.** `FakeClock` and `RecordingSleeper` mean expiry and
   backoff are asserted rather than waited for. The suite runs in seconds despite
   covering a full retry ladder.
 - **Assert on behaviour, not implementation** — except where the implementation
-  *is* the behaviour, such as "exactly one token fetch" or "peak concurrency ≤ 3".
+  *is* the behaviour, such as "exactly one keyring call" or "peak concurrency ≤ 3".
 
 ## Fixtures
 
@@ -87,7 +89,7 @@ Then run `uv run pytest tests/contract`. If it fails, the fixture and the
 mappers have drifted apart — decide which is wrong before changing either.
 
 These are public catalogue data, so there is nothing to redact. Never commit a
-fixture containing a token: the token endpoint's responses are constructed
+fixture containing a token or a credential: keyring's responses are constructed
 inline in tests, never recorded.
 
 ## Writing a good failing test
