@@ -182,7 +182,7 @@ in milliseconds, passed through to Spotify, which accepts only one of the two. C
 `position_ms` is at least 0, `/repeat` takes `state` of `off`, `track` or `context`,
 `/shuffle` takes a boolean `state`, `/queue` takes a `uri`, and `/play` takes at most one
 of `uris` (up to 750) or `context_uri`, with an optional `offset` and `position_ms`. No active device is `409`, not `404` — the player exists and is in
-the wrong state. Playback control on a free account is `403` `premium_required`. A command
+the wrong state. Playback control on a free account is `403` `premium-required`. A command
 Spotify accepted whose effect never became observable is `504`, with the last seen player
 state in `details.observed`.
 
@@ -212,9 +212,10 @@ A job, as `GET /v1/jobs/{job_id}` and `DELETE` return it:
 ```
 
 `status` is `pending`, `running`, `succeeded`, `failed` or `cancelled`. `result` is set only
-on `succeeded`; `error` and `error_type` (the problem type with underscores, such as
-`no_active_device`, or `internal_error` with an opaque message) only on failure. `attempts` counts the confirmation polls a playback
-command took. `GET /v1/jobs` answers `{ "count": ..., "jobs": [...] }`.
+on `succeeded`; `error` and `error_type` only on failure. `error_type` is the problem type
+with underscores, such as `no_active_device`, or `internal_error` with an opaque message.
+`attempts` counts the confirmation polls a playback command took. `GET /v1/jobs` answers
+`{ "count": ..., "jobs": [...] }`.
 
 | Method | Route | Purpose |
 | --- | --- | --- |

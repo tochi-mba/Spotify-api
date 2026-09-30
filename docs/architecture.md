@@ -144,8 +144,8 @@ rotation for everybody. The keys are what this process needs before it can serve
 | keyring keys unreachable | 503 — the token may be fine |
 | No Spotify connection on this profile | 502 — retrying cannot help |
 | Spotify 401 | one forced credential refresh, then retried; a repeat is an auth error |
-| Spotify 403 Premium | 403 `premium_required` |
-| Spotify 404 on a player command | 409 `no_active_device` when that is what it means |
+| Spotify 403 Premium | 403 `premium-required` |
+| Spotify 404 on a player command | 409 `no-active-device` when that is what it means |
 | Spotify 429 | honours `Retry-After`, else exponential backoff, within budget |
 | Spotify 5xx / timeout / reset | exponential backoff with a cap, within budget |
 | Budget exhausted | in a lookup, the item becomes an `error` result and the batch still returns 200; a player call answers 503 |
