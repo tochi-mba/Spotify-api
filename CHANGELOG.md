@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - Every request's keyring user token is now verified locally against keyring's published
-  keys before any work starts: RS256 only, issuer and audience (`spotify-api`) pinned, every
+  keys before any work starts: RS256 only, issuer and audience (`music-api`) pinned, every
   required claim present, expiry checked. Previously the token was forwarded to keyring
   unverified, so this service never knew which account a request belonged to.
 - Background jobs belong to the account that started them. `GET /v1/jobs`,
@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   results included.
 
 ### Changed
+
+- Music user tokens now use the provider-neutral `music-api` audience, independent of this
+  deployment's `spotify-api` service identity.
 
 - **Breaking:** the floor is now **Python 3.12** (CI runs 3.12 and 3.13).
   `.python-version`, `requires-python`, ruff's `target-version`, mypy's `python_version`,

@@ -29,8 +29,8 @@ __all__ = [
 
 TEST_SERVICE_TOKEN = "test-service-token-0123456789abcdef"
 
-AUDIENCE = "spotify-api"
-"""What keyring mints this service's user tokens for: its name in KEYRING_SERVICE_TOKENS."""
+AUDIENCE = "music-api"
+"""Provider-neutral audience for the music HTTP contract."""
 
 KEYRING_BASE_URL = BASE_URL
 

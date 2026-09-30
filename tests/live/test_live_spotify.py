@@ -6,7 +6,7 @@ contributor without either can still run the full suite::
 
     export SPOTIFY_API_KEYRING_BASE_URL=http://127.0.0.1:8001
     export SPOTIFY_API_KEYRING_SERVICE_TOKEN=...  # this service's token, from keyring
-    export SPOTIFY_LIVE_USER_TOKEN=...  # POST /v1/auth/service-token {"audience": "spotify-api"}
+    export SPOTIFY_LIVE_USER_TOKEN=...  # POST /v1/auth/service-token {"audience": "music-api"}
     uv run pytest -m live
 
 These are deliberately few and loose. They answer one question -- "do our
