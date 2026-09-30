@@ -52,7 +52,8 @@ export SPOTIFY_LIVE_USER_TOKEN=...             # keyring token minted for "spoti
 make test-live
 ```
 
-The live suite looks things up and reads; nothing in it starts playback.
+The live suite checks the keyring handover, looks tracks up and asks `/ready`. Nothing in
+it touches the player, so it never reads or interrupts what you are playing.
 
 ## Conventions
 
