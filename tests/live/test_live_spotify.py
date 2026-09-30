@@ -11,11 +11,14 @@ contributor without either can still run the full suite::
 
 These are deliberately few and loose. They answer one question -- "do our
 assumptions still hold against the real thing?" -- and must not assert on
-values Spotify is free to change, such as popularity or preview URLs.
+values Spotify is free to change, such as popularity or preview URLs. They cover
+keyring handing over a usable Spotify credential, track lookup (a well-known
+track found, nonsense not found, a mixed batch in order), ``/ready``, and one
+lookup end to end through the HTTP layer.
 
-Nothing here starts playback. Tests that would take over a speaker are gated
-separately on ``SPOTIFY_LIVE_DEVICE_ID``, so running the live suite can never
-interrupt whatever you happen to be listening to.
+None of them touches the player: nothing reads playback state or sends a
+command, so running the live suite can never interrupt whatever you happen to
+be listening to. The player is covered only against recorded responses.
 """
 
 from __future__ import annotations
