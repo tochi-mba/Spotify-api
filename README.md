@@ -32,15 +32,18 @@ schema is complete enough to generate a client from.
 ## Quickstart
 
 ```bash
-# Clone this repository next to Keyring-api: keyring-client is installed from
-# ../Keyring-api/clients/python until it is published.
 git clone https://github.com/tochi-mba/Spotify-api.git
 cd Spotify-api
-make install
+make install              # uv sync --group dev, including the tagged family clients
 
 cp .env.example .env      # point it at keyring (see Configuration)
 make run                  # http://localhost:8007/docs
 ```
+
+`keyring-client` and `settings-client` are tagged git sources (`[tool.uv.sources]` in
+`pyproject.toml`), so no sibling checkout is needed. If the family repositories are
+private, git needs a GitHub credential that can read them first, for example
+`gh auth login` followed by `gh auth setup-git`.
 
 ### Connecting a Spotify account
 

@@ -6,7 +6,7 @@ normative. This file is the short version.
 ## Setup
 
 ```bash
-uv sync --group dev
+make install             # uv sync --group dev
 uv run pre-commit install
 cp .env.example .env     # add credentials only if you want to run `make test-live`
 ```
