@@ -27,8 +27,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   [ADR-0008](https://github.com/tochi-mba/LUCY-assistant/blob/main/docs/adr/0008-python-3-12-floor.md):
   `weftai`, which the assistant hub depends on, requires 3.12 and uses PEP 695 type
   parameters that do not parse on 3.11. Generics here moved to PEP 695 syntax with it.
-- CI inherits `FAMILY_GITHUB_TOKEN`; image builds accept a BuildKit `github_token`
-  secret so tagged client packages can be fetched from private family repositories.
+- CI gets a short-lived token from the family token broker over OIDC (`id-token: write`)
+  rather than inheriting a shared credential; image builds accept a BuildKit
+  `github_token` secret so tagged client packages can be fetched from private family
+  repositories.
   `make docker` uses the signed-in GitHub account without saving its token in an image.
 - **Breaking:** every environment variable is now prefixed `SPOTIFY_API_`, and
   `SPOTIFY_API_BASE_URL` is now `SPOTIFY_API_SPOTIFY_BASE_URL`. The bare `KEYRING_*` names
@@ -92,5 +94,5 @@ Initial release.
 - 100% branch coverage enforced in CI across Python 3.11, 3.12 and 3.13.
 - Multi-stage Dockerfile running as a non-root user, with a liveness healthcheck.
 
-[Unreleased]: https://github.com/tochi-mba/Spotify-api/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/tochi-mba/Spotify-api/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tochi-mba/Spotify-api/compare/de182f1bb1f7388cb7f6ff0e87991797834ceadc...HEAD
+[0.1.0]: https://github.com/tochi-mba/Spotify-api/tree/de182f1bb1f7388cb7f6ff0e87991797834ceadc
