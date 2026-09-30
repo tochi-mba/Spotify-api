@@ -157,8 +157,9 @@ you nothing else — the request is still `200`.
 
 ### Background jobs
 
-Every route takes `?async=true`, which answers `202` with a `job_id` and a
-`poll_url` instead of holding the connection open. A job belongs to the account
+`POST /v1/lookup` and every `POST /v1/player/...` command take `?async=true`, which
+answers `202` with a `job_id` and a `poll_url` instead of holding the connection open.
+Reads answer straight away and take no such flag. A job belongs to the account
 that started it: only that account can list, read or cancel it, and anybody else
 gets the same `404` an unknown job gets. Jobs are held in memory, so they are lost
 on restart and are not shared between replicas.
@@ -211,12 +212,16 @@ Switch on the last segment of `type`. `request_id` is on every problem, includin
 | `validation-failed` | 422 | The body violates the schema. `errors` has the field-level reasons. |
 | `batch-too-large` | 422 | More items than this deployment allows. |
 | `credential-unavailable` | 502 | You have not connected Spotify on that profile, or the grant stopped working. Reconnect it in keyring. |
+| `track-lookup-error` | 502 | A lookup failed in a way that could not be reported as one item's error. |
 | `keyring-unavailable` | 503 | keyring, or its published keys, could not be reached. |
+| `preferences-unavailable` | 503 | settings-api refused this service, or your default profile could not be read and you named none. |
 | `spotify-auth-error` | 503 | Spotify refused the credential keyring provided. |
 | `spotify-rate-limit-error` | 503 | Rate limited past the retry budget. |
 | `spotify-unavailable-error` | 503 | Spotify unreachable or failing. |
 | `confirmation-timeout` | 504 | Spotify accepted a command but its effect never became observable. |
 | `internal-server-error` | 500 | Unanticipated. Detail is in the logs, never the response. |
+
+[docs/api.md](docs/api.md#errors) also lists the generic types for an unknown path or method.
 
 Pass `X-Request-ID` and it is echoed back on the response and stamped on every
 log line the request produced. Omit it and one is generated.

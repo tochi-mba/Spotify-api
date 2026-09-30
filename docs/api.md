@@ -174,15 +174,22 @@ signal.
 | `POST` | `/v1/player/transfer` | Move playback to another device |
 | `POST` | `/v1/player/queue` | Queue an item without interrupting playback |
 
-Reads take an optional `market`. Commands take an optional `device_id` (query or body,
-depending on the route). No active device is `409`, not `404` — the player exists and is in
+`GET /v1/player` and `/currently-playing` take an optional `market`.
+`/recently-played` takes `limit` (1–50, default 20) and `after` or `before`, each a Unix time
+in milliseconds, passed through to Spotify, which accepts only one of the two. Commands take an optional `device_id`: in the query for
+`/pause`, `/next` and `/previous`, which have no body, and in the body for the rest.
+`/transfer` requires it. Bodies are validated like lookup's: `volume_percent` is 0–100,
+`position_ms` is at least 0, `/repeat` takes `state` of `off`, `track` or `context`,
+`/shuffle` takes a boolean `state`, `/queue` takes a `uri`, and `/play` takes at most one
+of `uris` (up to 750) or `context_uri`, with an optional `offset` and `position_ms`. No active device is `409`, not `404` — the player exists and is in
 the wrong state. Playback control on a free account is `403` `premium_required`. A command
 Spotify accepted whose effect never became observable is `504`, with the last seen player
 state in `details.observed`.
 
 ## Background jobs
 
-Every `/v1` mutation and `POST /v1/lookup` takes `?async=true`. The work is the same coroutine
+Every `POST /v1/player/...` command and `POST /v1/lookup` take `?async=true`. The reads and
+the job routes do not. The work is the same coroutine
 either way; the flag only chooses whether to wait for it.
 
 - `async=false` (default) — do the work, answer with the result.
@@ -238,6 +245,7 @@ failures add `errors`: `{ location, message }` per field, never the offending in
 | `batch-too-large` | 422 | More items than this deployment allows. `details.limit` has the cap |
 | `credential-unavailable` / `track-lookup-error` | 502 | No usable Spotify connection, or a lookup that could not be described as an item error |
 | `keyring-unavailable` / `spotify-auth-error` / `spotify-rate-limit-error` / `spotify-unavailable-error` | 503 | keyring or Spotify unusable for the whole request |
+| `preferences-unavailable` | 503 | settings-api refused this service, or your default profile could not be read and the request named none. Send `X-Keyring-Profile` |
 | `confirmation-timeout` | 504 | Command accepted; effect never observed. `details.observed` is the last player state |
 | `internal-server-error` | 500 | Unanticipated. Quote the `request_id` |
 
