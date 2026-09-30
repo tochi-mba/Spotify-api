@@ -33,7 +33,8 @@ Identity is delegated to keyring. Direction is enforced by import-linter contrac
 ```
 
 `config.py`, `logging.py`, `context.py` and `errors.py` sit beside these packages as a shared
-kernel. `app.py` is the composition root: it owns the one `httpx.AsyncClient`, builds the
+kernel, and `preferences.py` reads each person's settings from settings-api when one is
+configured. `app.py` is the composition root: it owns the one `httpx.AsyncClient`, builds the
 JWKS client and token verifier, and wires the graph onto `app.state`.
 
 What the contracts actually refuse:
@@ -43,6 +44,8 @@ What the contracts actually refuse:
   dependency, and the credentials package.
 - `httpx` stays out of `api/` and `models/`. The composition root, the credentials adapter and
   the Spotify client are the three places that open sockets.
+- `settings_client` is imported only from `preferences.py`, the one place a person's settings
+  meet this deployment's configuration.
 
 There is no in-process Client Credentials grant. Spotify access belongs to a person, lives in
 keyring, and is resolved per request.
@@ -145,7 +148,7 @@ rotation for everybody. The keys are what this process needs before it can serve
 | Spotify 404 on a player command | 409 `no_active_device` when that is what it means |
 | Spotify 429 | honours `Retry-After`, else exponential backoff, within budget |
 | Spotify 5xx / timeout / reset | exponential backoff with a cap, within budget |
-| Budget exhausted | the item becomes an `error` result; the batch still returns 200 |
+| Budget exhausted | in a lookup, the item becomes an `error` result and the batch still returns 200; a player call answers 503 |
 | Command accepted, effect never seen | 504, last player state in `details.observed` |
 | Anything unanticipated | opaque 500; type and stack in the logs, never the exception's text |
 
