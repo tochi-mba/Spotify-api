@@ -150,9 +150,9 @@ ignore = [
     "D213",    # conflicts with D212
     "TRY003",  # our exceptions carry explicit messages by design
 ]
-# Relative to Media-tool: D, FBT and PGH stay selected (docstrings are required here;
-# the other two already pass). ANN401 stays as inline noqa rather than a blanket ignore.
-# FA and PERF were adopted with zero findings.
+# Unlike some siblings, D, FBT and PGH stay selected here: docstrings are required, and the
+# other two already pass. ANN401 stays as inline noqa rather than a blanket ignore. FA and
+# PERF were adopted with zero findings.
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI resolves route signatures at runtime to build the OpenAPI schema and
