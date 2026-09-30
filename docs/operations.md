@@ -66,8 +66,8 @@ message names the replacement.
 | `SPOTIFY_API_CREDENTIAL_CACHE_SKEW_SECONDS` | `60` | Drop a cached Spotify credential this many seconds before it expires. `0–600`. |
 | `SPOTIFY_API_CREDENTIAL_CACHE_DEFAULT_TTL_SECONDS` | `300` | Cache lifetime when keyring reports no expiry. `0–3600`. |
 
-Two settings must agree with keyring or nothing works, and both fail closed: `KEYRING_ISSUER`
-and `KEYRING_AUDIENCE`.
+Two settings must agree with keyring or nothing works, and both fail closed:
+`SPOTIFY_API_KEYRING_ISSUER` and `SPOTIFY_API_KEYRING_AUDIENCE`.
 
 ### Upstream and resilience
 
@@ -176,7 +176,7 @@ What remains your problem:
 | Startup fails with a short service token | `SPOTIFY_API_KEYRING_SERVICE_TOKEN` or `SPOTIFY_API_SETTINGS_API_TOKEN` is under 32 characters, the rule keyring and settings-api enforce. |
 | Startup fails: settings-api URL and token must be set together | Half a settings-api configuration. Set both or neither. |
 | `503` `preferences-unavailable` | settings-api refused this service, or could not be reached for a request that named no profile. Send `X-Keyring-Profile`, or check this service's grant in settings-api. |
-| Every request answers `401` on a deployment that worked | `KEYRING_ISSUER` or `KEYRING_AUDIENCE` no longer matches keyring. Both fail closed and say nothing more. Also: callers still sending only `X-Keyring-User-Token` after that header is removed. |
+| Every request answers `401` on a deployment that worked | `SPOTIFY_API_KEYRING_ISSUER` or `SPOTIFY_API_KEYRING_AUDIENCE` no longer matches keyring. Both fail closed and say nothing more. Also: callers still sending only `X-Keyring-User-Token` after that header is removed. |
 | `/ready` is `503` | keyring's JWKS document cannot be fetched. Check the base URL and that keyring is up. Cached keys survive an outage; a cold start does not. |
 | Lookups answer `502` `credential-unavailable` | That account has not connected Spotify on that profile, or the grant was revoked. Reconnect it in keyring. |
 | Playback answers `409` | Nothing is awake. Open Spotify on a device, or pass `device_id`. |
