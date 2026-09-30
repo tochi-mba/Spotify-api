@@ -23,10 +23,10 @@ this service, this service verifies it locally against keyring's published keys,
 account comes from that token and from nowhere else.
 
 ```
-Authorization: Bearer <token from keyring, audience "music-api">
+Authorization: Bearer <token from keyring, audience "spotify-api">
 ```
 
-Mint one with `POST /v1/auth/service-token {"audience": "music-api"}` against keyring.
+Mint one with `POST /v1/auth/service-token {"audience": "spotify-api"}` against keyring.
 Verification is local — RS256 only, issuer and audience pinned, expiry checked — so there is
 no round trip per request. The verified `sub` is the account id; no field, path or query
 parameter may name one.
