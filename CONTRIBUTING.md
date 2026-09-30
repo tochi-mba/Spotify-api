@@ -8,10 +8,12 @@ normative. This file is the short version.
 ```bash
 make install             # uv sync --group dev
 uv run pre-commit install
-cp .env.example .env     # add credentials only if you want to run `make test-live`
+cp .env.example .env     # only needed to run the service, not to test it
 ```
 
-The full test suite needs no credentials and no network.
+The full test suite needs no credentials and no network. `make test-live` does, and
+reads them from exported variables rather than `.env`; see
+[docs/testing.md](docs/testing.md#running).
 
 ## The loop
 

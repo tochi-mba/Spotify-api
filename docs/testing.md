@@ -42,7 +42,17 @@ make cov                               # HTML report in htmlcov/
 Live tests are deselected by default and skip outright without
 `SPOTIFY_API_KEYRING_BASE_URL`, `SPOTIFY_API_KEYRING_SERVICE_TOKEN` and
 `SPOTIFY_LIVE_USER_TOKEN`, so the full suite runs on a machine that has never
-seen keyring or a Spotify credential.
+seen keyring or a Spotify credential. The skip reads the process environment, not
+`.env`, so export them:
+
+```bash
+export SPOTIFY_API_KEYRING_BASE_URL=http://127.0.0.1:8001
+export SPOTIFY_API_KEYRING_SERVICE_TOKEN=...   # this service's entry in keyring
+export SPOTIFY_LIVE_USER_TOKEN=...             # keyring token minted for "spotify-api"
+make test-live
+```
+
+The live suite looks things up and reads; nothing in it starts playback.
 
 ## Conventions
 
