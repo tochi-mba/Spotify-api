@@ -52,8 +52,8 @@ Spotify access belongs to a person and lives in keyring, never here.
 2. **Connect Spotify to a profile.** With keyring's Spotify OAuth provider configured,
    each person runs `POST /v1/profiles/{profile}/connections/spotify/authorize` in keyring
    and completes the consent screen.
-3. **Call this service with a token minted for it.** A caller mints a short-lived token
-   with `POST /v1/auth/service-token {"audience": "spotify-api"}` and sends it as
+3. **Call the music contract with a token minted for it.** A caller mints a short-lived token
+   with `POST /v1/auth/service-token {"audience": "music-api"}` and sends it as
    `Authorization: Bearer <token>`. `X-Keyring-User-Token` is still accepted for one release.
    `X-Keyring-Profile` chooses the profile, defaulting to
    `SPOTIFY_API_KEYRING_DEFAULT_PROFILE`.
@@ -64,7 +64,7 @@ Spotify access belongs to a person and lives in keyring, never here.
 
 Every `/v1` route requires `Authorization: Bearer <token>`. It is verified locally against
 keyring's published keys before any work starts: RS256 only, issuer and audience
-(`spotify-api`) pinned, expiry checked. A token keyring did not mint for this
+(`music-api`) pinned, expiry checked. A token keyring did not mint for this
 service is a `401` with one fixed message whichever rule refused it; keyring's
 keys being unreachable is a `503`, because the token may be perfectly good.
 
@@ -232,7 +232,7 @@ it had a prefix — the error names the variable that replaced it.
 | `SPOTIFY_API_KEYRING_BASE_URL` | — | **Required.** Where keyring is. |
 | `SPOTIFY_API_KEYRING_SERVICE_TOKEN` | — | **Required.** This service's entry in keyring's `KEYRING_SERVICE_TOKENS`; at least 32 characters. |
 | `SPOTIFY_API_KEYRING_ISSUER` | `http://127.0.0.1:8001` | Must equal keyring's `KEYRING_ISSUER`. |
-| `SPOTIFY_API_KEYRING_AUDIENCE` | `spotify-api` | Must equal this service's name in `KEYRING_SERVICE_TOKENS`. |
+| `SPOTIFY_API_KEYRING_AUDIENCE` | `music-api` | Provider-neutral audience for Lucy's music contract. |
 | `SPOTIFY_API_KEYRING_DEFAULT_PROFILE` | `personal` | Used when a request sends no `X-Keyring-Profile`. |
 | `SPOTIFY_API_KEYRING_TIMEOUT_SECONDS` | `5.0` | Per call to keyring. |
 | `SPOTIFY_API_JWKS_CACHE_SECONDS` | `3600` | How long keyring's public keys are trusted. |

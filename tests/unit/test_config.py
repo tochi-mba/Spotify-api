@@ -56,7 +56,7 @@ def test_operational_defaults_are_sane() -> None:
     assert settings.log_format == "json"
     assert settings.spotify_base_url == "https://api.spotify.com/v1"
     assert settings.keyring_issuer == "http://127.0.0.1:8001"
-    assert settings.keyring_audience == "spotify-api"
+    assert settings.keyring_audience == "music-api"
     assert settings.keyring_default_profile == "personal"
     assert settings.keyring_timeout_seconds == 5.0
     assert settings.jwks_cache_seconds == 3600.0
@@ -125,7 +125,7 @@ def test_a_short_service_token_is_refused_without_being_echoed() -> None:
     assert "too-short-token" not in str(excinfo.value)
 
 
-@pytest.mark.parametrize("audience", ["", " spotify-api", "spotify-api.jobs"])
+@pytest.mark.parametrize("audience", ["", " music-api", "music-api.jobs"])
 def test_an_audience_keyring_could_never_mint_for_this_service_is_refused(audience: str) -> None:
     with pytest.raises(ValidationError):
         make_settings(keyring_audience=audience)
