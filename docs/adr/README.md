@@ -16,5 +16,6 @@ one that replaced it says so.
 
 Copy the shape of an existing record: context, decision, consequences, and what would
 change the answer. Number it in sequence. A decision that only affects this repository
-lives here; one that binds the whole family lives in the meta repository's `docs/adr/`
-and is linked from here rather than restated.
+lives here; one that binds the whole family lives in the meta repository's
+[`docs/adr/`](https://github.com/tochi-mba/LUCY-assistant/tree/main/docs/adr) rather than
+being restated here.
