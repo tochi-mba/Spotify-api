@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from spotify_api.jobs.confirm import (
+    all_of,
     always_confirmed,
     device_is,
     is_paused,
@@ -203,6 +204,29 @@ class PlayerResource:
             params={"state": state, "device_id": device_id},
         )
         return repeat_is(state)
+
+    async def set_modes(
+        self,
+        *,
+        context: UserContext,
+        shuffle: bool | None,
+        repeat: str | None,
+        device_id: str | None = None,
+    ) -> Predicate:
+        """Set shuffle, repeat or both, and return how to confirm whichever were set.
+
+        ``None`` leaves that mode as the device has it.
+        """
+        confirmations: list[Predicate] = []
+        if shuffle is not None:
+            confirmations.append(
+                await self.set_shuffle(context=context, state=shuffle, device_id=device_id)
+            )
+        if repeat is not None:
+            confirmations.append(
+                await self.set_repeat(context=context, state=repeat, device_id=device_id)
+            )
+        return all_of(*confirmations)
 
     async def transfer(
         self, *, context: UserContext, device_id: str, play: bool | None = None

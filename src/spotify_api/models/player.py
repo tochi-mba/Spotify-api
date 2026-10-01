@@ -50,6 +50,7 @@ class PlayRequest(_PlayerRequest):
             "examples": [
                 {"uris": ["spotify:track:7tFiyTwD0nx5a1eklYtX2J"]},
                 {"context_uri": "spotify:album:1GbtB4zTqAsyfZEsm1RZfx", "offset": {"position": 3}},
+                {"context_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "shuffle": True},
                 {},
             ]
         },
@@ -68,6 +69,26 @@ class PlayRequest(_PlayerRequest):
     position_ms: int | None = Field(
         default=None, ge=0, description="Start this far into the first item."
     )
+    shuffle: bool | None = Field(
+        default=None,
+        description=(
+            "Shuffle or not, set once playback has started. Omit to take the person's "
+            "`spotify.shuffle_on_play` on a new play, and to leave shuffle alone on a resume."
+        ),
+    )
+    repeat: RepeatState | None = Field(
+        default=None,
+        description=(
+            "off, track or context, set once playback has started. Omit to take the "
+            "person's `spotify.repeat_mode` on a new play, and to leave repeat alone on a "
+            "resume."
+        ),
+    )
+
+    @property
+    def starts_something(self) -> bool:
+        """Whether this names what to play, as opposed to resuming what was loaded."""
+        return self.context_uri is not None or bool(self.uris)
 
     @model_validator(mode="after")
     def _not_both_sources(self) -> PlayRequest:

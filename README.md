@@ -269,8 +269,8 @@ it had a prefix — the error names the variable that replaced it.
 
 Missing keyring configuration is a **startup failure**, by design — better than
 running misconfigured. With settings-api configured, each person's `spotify` settings
-can lower the batch cap and the confirm timeout, and choose a default market and a
-default profile; see [docs/operations.md](docs/operations.md#per-person-settings-settings-api).
+can lower the batch cap and the confirm timeout, choose a default market and a default
+profile, and have a new play shuffled or repeated; see [docs/operations.md](docs/operations.md#per-person-settings-settings-api).
 
 ## Design notes
 

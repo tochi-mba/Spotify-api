@@ -185,6 +185,13 @@ takes `state` of `off`, `track` or `context`, `/shuffle` takes a boolean `state`
 takes a `uri`, and `/play` takes at most one of `uris` (up to 750) or `context_uri`, with an
 optional `offset` and `position_ms`.
 
+`/play` also takes an optional `shuffle` (boolean) and `repeat` (`off`, `track` or
+`context`). Either is set once playback is confirmed, and then confirmed itself, so the
+answer is a state in which the track is playing *and* the mode is as asked. A play that
+names what to play and says neither takes the person's `spotify.shuffle_on_play` and
+`spotify.repeat_mode`. Those settings only ever turn a mode on: left at their defaults they
+send nothing, and a resume (no `uris`, no `context_uri`) never applies them.
+
 No active device is `409`, not `404` — the player exists and is in the wrong state. Playback
 control on a free account is `403` `premium-required`. A command Spotify accepted whose
 effect never became observable is `504`, with the last seen player state in

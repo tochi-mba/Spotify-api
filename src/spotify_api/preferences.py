@@ -18,6 +18,10 @@ here, once.
 refuses: guessing ``personal`` would quietly act on the wrong account. It fails
 only the request that named no profile.
 
+**A mode is only ever turned on.** ``shuffle_on_play`` and ``repeat_mode`` apply to a new
+play that does not say otherwise. Off, their defaults, leaves the device as the person
+last had it: a setting nobody touched must not undo a shuffle they chose in the app.
+
 **A refusal is not an outage.** settings-api answering 401 or 403 means this
 service is misconfigured, and serving defaults would hide that behind behaviour
 that happens to work. The request fails instead.
@@ -41,6 +45,8 @@ from spotify_api.logging import get_logger
 
 if TYPE_CHECKING:
     from settings_client import ResolvedSettings, SettingsClient
+
+    from spotify_api.models.player import PlayRequest
 
 logger = get_logger(__name__)
 
@@ -72,6 +78,25 @@ class Preferences:
 
     ``None`` when settings-api could not be asked and the answer must not be guessed.
     """
+
+    shuffle_on_play: bool = False
+    """Whether a new play is shuffled when the request does not say. Off changes nothing."""
+
+    repeat_mode: str = "off"
+    """``track`` or ``context`` to repeat a new play that does not say; ``off`` changes nothing."""
+
+    def shuffle_for(self, play: PlayRequest) -> bool | None:
+        """What to set shuffle to for this play, or ``None`` to leave it alone."""
+        if play.shuffle is not None:
+            return play.shuffle
+        return True if play.starts_something and self.shuffle_on_play else None
+
+    def repeat_for(self, play: PlayRequest) -> str | None:
+        """What to set repeat to for this play, or ``None`` to leave it alone."""
+        if play.repeat is not None:
+            return play.repeat.value
+        chosen = play.starts_something and self.repeat_mode != "off"
+        return self.repeat_mode if chosen else None
 
     def profile(self, requested: str | None) -> str:
         """The profile a request is resolved with: the one it named, or the default.
@@ -182,6 +207,8 @@ class SettingsApiPreferences:
             max_batch_size=_narrow_int(deployment.max_batch_size, batch),
             confirm_timeout_seconds=_narrow_float(deployment.confirm_timeout_seconds, timeout),
             default_profile=self._default_profile(resolved),
+            shuffle_on_play=resolved.get("shuffle_on_play", None) is True,
+            repeat_mode=_repeat_mode(resolved),
         )
 
     def _market(self, resolved: ResolvedSettings) -> str | None:
@@ -258,6 +285,16 @@ def _whole_number(resolved: ResolvedSettings, key: str, *, minimum: int) -> int 
     if value is not None:
         logger.warning("setting_unusable", namespace=NAMESPACE, key=key)
     return None
+
+
+REPEATING = frozenset({"track", "context"})
+"""The two values of ``spotify.repeat_mode`` that ask for something."""
+
+
+def _repeat_mode(resolved: ResolvedSettings) -> str:
+    """``spotify.repeat_mode``: ``track``, ``context``, or ``off`` for anything else."""
+    value = resolved.get("repeat_mode", None)
+    return value if isinstance(value, str) and value in REPEATING else "off"
 
 
 def _positive_seconds(resolved: ResolvedSettings, key: str) -> float | None:
