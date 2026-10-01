@@ -110,8 +110,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dead code found by the family sweep, none of it reachable from a request:
   `Settings.is_production`, `JobRunner.in_flight` and `SpotifyResponse.is_empty` were each
   referenced only by the unit test that covered them, and the `SettingsDep` alias was
-  exported but no route depended on it. `Settings.environment` is still read and logged at
-  startup; `get_settings_dependency` stays, since the integration suite overrides it.
+  exported but no route depended on it, which left `get_settings_dependency` used only by its
+  own test and an override in the integration suite that nothing consulted; both went with
+  it. `Settings.environment` is still read and logged at startup.
 
 ## [0.1.0] — 2026-09-10
 

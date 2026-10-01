@@ -19,7 +19,7 @@ import httpx
 import pytest
 from keyring_client.testing import FakeKeyring
 
-from spotify_api.api.dependencies import get_resolver, get_settings_dependency
+from spotify_api.api.dependencies import get_resolver
 from spotify_api.app import create_app
 from spotify_api.models.responses import LookupResult, LookupStatus
 from tests.factories import make_settings, user_token
@@ -104,7 +104,6 @@ def app(
     settings = make_settings(**settings_overrides)
     application = create_app(settings=settings, keyring_transport=keyring.transport())
     application.dependency_overrides[get_resolver] = lambda: resolver
-    application.dependency_overrides[get_settings_dependency] = lambda: settings
     return application
 
 
