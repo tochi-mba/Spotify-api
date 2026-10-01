@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Spotify-api resolves batches of loosely specified tracks against the Spotify Web API and controls playback with every command confirmed on the device. It holds no Spotify credential of its own. A REX Technologies product.">
+<meta name="robots" content="index,follow">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080A09">
+<meta property="og:title" content="Spotify-api — track lookup and playback, confirmed on the device — REX Technologies">
+<meta property="og:description" content="Spotify-api resolves batches of loosely specified tracks against the Spotify Web API and controls playback with every command confirmed on the device. It holds no Spotify credential of its own. A REX Technologies product.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tochi-mba.github.io/Spotify-api/">
+<meta name="twitter:card" content="summary">
+<link rel="canonical" href="https://tochi-mba.github.io/Spotify-api/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.replace("no-js","js");</script>
+<noscript><style>@media(max-width:760px){.site-nav{display:flex!important;position:static!important;flex-direction:column}.menu-button{display:none!important}}</style></noscript>
+<title>Spotify-api — track lookup and playback, confirmed on the device — REX Technologies</title>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="ambient ambient-one" aria-hidden="true"></div>
+<div class="ambient ambient-two" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="container nav-wrap">
+    <a class="brand" href="#top" aria-label="Spotify-api, by REX Technologies">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M12 23V9l12-3v14"/><circle cx="9.5" cy="23" r="2.8"/><circle cx="21.5" cy="20" r="2.8"/></svg></span>
+      <span class="brand-lockup"><span class="brand-company">REX Technologies</span><span class="brand-name">Spotify-api</span></span>
+    </a>
+    <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-nav"><span class="sr-only">Toggle navigation</span><span></span><span></span></button>
+    <nav id="site-nav" class="site-nav" aria-label="Primary navigation">
+      <a href="#how">How it works</a>
+      <a href="#api">The API</a>
+      <a href="#install">Run it</a>
+      <a href="#limits">What to know first</a>
+      <a href="#docs">Docs</a>
+      <a class="nav-github" href="https://github.com/tochi-mba/Spotify-api">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero container" id="top">
+    <div class="hero-copy">
+      <p class="eyebrow signal">Lookup · playback</p>
+      <h1>A title and a hint in. A <span>confirmed</span> play out.</h1>
+      <p class="hero-lede">Submit <code>{ name, artist?, album?, year? }</code> and get back one fully populated result per item, in order, each with its own status. Issue a playback command and get the player state that confirms it took effect.</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="#install">Run it on your machine</a>
+        <a class="button button-secondary" href="https://github.com/tochi-mba/Spotify-api">Source on GitHub</a>
+      </div>
+      <div class="hero-meta">
+        <span>Python 3.12+</span>
+        <span>Serves on :8007</span>
+        <span>No credential of its own</span>
+        <span>MIT licensed</span>
+      </div>
+    </div>
+    <pre class="console" aria-label="A lookup request"><code><span class="k">POST</span> /v1/lookup
+{
+  "items": [
+    { "name": "Bohemian Rhapsody", "artist": "Queen", "year": 1975 },
+    { "name": "Redbone" },
+    { "name": "a track that does not exist" }
+  ]
+}
+
+<span class="you"># three results, in order, each with its own status</span></code></pre>
+  </section>
+
+  <section class="trust-strip">
+    <div class="container trust-grid">
+      <div><strong>Only a name is required</strong><span>Artist, album and year are hints that narrow the search.</span></div>
+      <div><strong>Partial success</strong><span>One item that cannot be resolved does not fail the batch.</span></div>
+      <div><strong>Confirmed, not assumed</strong><span>A command answers with the player state that shows it took effect.</span></div>
+      <div><strong>Your account, your token</strong><span>Keyring hands over the headers for that person&#x27;s own connection.</span></div>
+    </div>
+  </section>
+
+  <section class="section container" id="how">
+    <div class="section-heading">
+      <p class="eyebrow signal">How it works</p>
+      <h2>It implements the family's music contract.</h2>
+      <p>The LUCY hub speaks to music through a contract, not a named service; this is the implementation of it for Spotify. Every request carries the caller's token, verified locally against the keys <a href="https://tochi-mba.github.io/Keyring-api/">keyring</a> publishes.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span class="step-number">01</span>
+        <h3>Messy metadata in</h3>
+        <p>A track title, maybe an artist, maybe a year, from a spreadsheet, a playlist export or someone typing.</p>
+      </div>
+      <div class="step">
+        <span class="step-number">02</span>
+        <h3>Canonical data out</h3>
+        <p>IDs, URIs, ISRCs, album and release date, duration and popularity, one result per item, in order.</p>
+      </div>
+      <div class="step">
+        <span class="step-number">03</span>
+        <h3>Playback that answers honestly</h3>
+        <p>Play, pause, seek, queue and transfer each answer with the player state that confirms the command, rather than a bare acknowledgement.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container" id="api">
+    <div class="section-heading">
+      <p class="eyebrow signal">The API</p>
+      <h2>A contract that is deliberately boring and stable.</h2>
+      <p>The OpenAPI schema is complete enough to generate a client from. The reference is <a href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/api.md">docs/api.md</a>.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card"><span class="meta">POST /v1/lookup</span><h3>Lookup</h3><p>Resolve a batch of tracks, with partial success.</p></div>
+      <div class="feature-card"><span class="meta">GET /v1/player</span><h3>Playback state</h3><p>The player, its devices, what is playing, the queue and what was played recently.</p></div>
+      <div class="feature-card"><span class="meta">POST /v1/player/play</span><h3>Commands</h3><p>Play, pause, next, previous, seek, volume, shuffle, repeat, transfer and queue, each confirmed.</p></div>
+      <div class="feature-card"><span class="meta">GET /v1/jobs</span><h3>Jobs</h3><p>Poll or cancel work started with <code>?async=true</code>.</p></div>
+      <div class="feature-card"><span class="meta">GET /ready</span><h3>Health</h3><p><code>GET /healthy</code> and <code>GET /ready</code> need no token.</p></div>
+      <div class="feature-card"><span class="meta">401 · 503</span><h3>Refusals</h3><p>A token keyring did not mint for this service is a 401 with one fixed message; keyring's keys being unreachable is a 503.</p></div>
+    </div>
+  </section>
+
+  <section class="section container" id="install">
+    <div class="section-heading">
+      <p class="eyebrow signal">Run it</p>
+      <h2>Clone, install, point it at keyring.</h2>
+      <p>You need Python 3.12 or newer and <a href="https://docs.astral.sh/uv/">uv</a>. Spotify access belongs to a person and lives in keyring, never here.</p>
+    </div>
+    <ol class="install-steps">
+      <li>Clone and install.
+        <div class="command-row"><code>git clone https://github.com/tochi-mba/Spotify-api.git &amp;&amp; cd Spotify-api &amp;&amp; make install</code><button class="copy-button" type="button" data-copy="git clone https://github.com/tochi-mba/Spotify-api.git &amp;&amp; cd Spotify-api &amp;&amp; make install">Copy</button></div>
+      </li>
+      <li>Point it at keyring.
+        <div class="command-row"><code>cp .env.example .env</code><button class="copy-button" type="button" data-copy="cp .env.example .env">Copy</button></div>
+      </li>
+      <li>Serve it; the interactive docs are at <code>/docs</code>.
+        <div class="command-row"><code>make run</code><button class="copy-button" type="button" data-copy="make run">Copy</button></div>
+      </li>
+    </ol>
+    <p class="install-note">Register the service with keyring, connect Spotify to a profile through keyring's consent flow, then call this service with a token minted for the audience <code>spotify-api</code>. The README has the three steps in full.</p>
+    <p id="copy-status" class="sr-only" aria-live="polite"></p>
+  </section>
+
+  <section class="section container" id="limits">
+    <div class="section-heading">
+      <p class="eyebrow signal">What to know first</p>
+      <h2>What to know before you lean on it.</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Does it store my Spotify credentials?</summary>
+        <p>No. It holds no Spotify credential of its own. Keyring holds the connection and hands over the headers to attach, per request, for that person.</p>
+      </details>
+      <details>
+        <summary>What does a playback command return?</summary>
+        <p>The player state that confirms the command took effect. A command whose effect cannot be confirmed says so, rather than reporting success.</p>
+      </details>
+      <details>
+        <summary>Which tokens does it accept?</summary>
+        <p>Only one keyring minted for this service: RS256, with the issuer and the audience pinned and the expiry checked, before any work starts.</p>
+      </details>
+      <details>
+        <summary>Is it affiliated with Spotify?</summary>
+        <p>No. It is independent software that uses the Spotify Web API, and is not affiliated with or endorsed by Spotify.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="section container" id="docs">
+    <div class="section-heading">
+      <p class="eyebrow signal">Docs</p>
+      <h2>Written for the person who has to run it.</h2>
+    </div>
+    <div class="feature-grid">
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/api.md"><h3>The HTTP contract</h3><p>Every route, field and error.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/architecture.md"><h3>Architecture</h3><p>The layers, and what each may import.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/operations.md"><h3>Operations</h3><p>Every setting, and connecting an account.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/mcp.md"><h3>Assistant tools</h3><p>The operations as an assistant would be offered them.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/docs/testing.md"><h3>Testing</h3><p>Unit, contract, integration and live tests.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Spotify-api/blob/main/CHANGELOG.md"><h3>Changelog</h3><p>What changed, and why it was wrong before.</p></a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-wrap">
+    <span>© <span id="year">2026</span> REX Technologies · Spotify-api</span>
+    <span>Part of the <a href="https://tochi-mba.github.io/LUCY-assistant/">LUCY family</a>. MIT licensed. Not affiliated with Spotify.</span>
+    <span class="footer-links">
+      <a href="https://github.com/tochi-mba/Spotify-api/blob/main/CHANGELOG.md">What's new <span aria-hidden="true">↗</span></a>
+      <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
+    </span>
+  </div>
+</footer>
+<script src="app.js" defer></script>
+</body>
+</html>
