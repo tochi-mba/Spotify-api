@@ -56,7 +56,6 @@ __all__ = [
     "get_player",
     "get_preferences",
     "get_resolver",
-    "get_settings_dependency",
     "get_user_context",
 ]
 
@@ -128,12 +127,6 @@ def get_job_store(request: Request) -> JobStore:
     """Return the job store assembled at startup."""
     store: JobStore = request.app.state.job_store
     return store
-
-
-def get_settings_dependency(request: Request) -> Settings:
-    """Return the settings this application was created with."""
-    settings: Settings = request.app.state.settings
-    return settings
 
 
 def get_preference_source(request: Request) -> PreferenceSource:

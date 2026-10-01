@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -11,7 +10,6 @@ from keyring_client import StdlibLogger
 from settings_client import ResolvedSettings, Value
 
 from spotify_api.__main__ import main
-from spotify_api.api.dependencies import get_settings_dependency
 from spotify_api.app import create_app
 from spotify_api.config import get_settings
 from spotify_api.models.responses import PROBLEM_CONTENT_TYPE
@@ -86,12 +84,6 @@ async def test_one_http_client_is_shared_by_the_whole_graph() -> None:
 def test_settings_are_available_before_the_lifespan_runs() -> None:
     settings = make_settings(environment="test")
     assert create_app(settings=settings).state.settings is settings
-
-
-def test_the_settings_dependency_hands_out_the_apps_settings() -> None:
-    settings = make_settings(environment="test")
-    app = create_app(settings=settings)
-    assert get_settings_dependency(SimpleNamespace(app=app)) is settings  # type: ignore[arg-type]
 
 
 def test_the_factory_falls_back_to_environment_settings(
