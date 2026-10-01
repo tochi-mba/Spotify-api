@@ -31,6 +31,7 @@ class TrackResolver(Protocol):
         context: UserContext,
         market: str | None = None,
         default_market: str | None = None,
+        allow_explicit: bool = True,
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order."""
         ...

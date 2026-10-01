@@ -13,7 +13,12 @@ from settings_client.testing import FakeSettingsClient
 
 from spotify_api.api.dependencies import get_resolver
 from spotify_api.app import create_app
-from spotify_api.preferences import PROFILE_UNKNOWN, REFUSED, build_preference_source
+from spotify_api.preferences import (
+    EXPLICIT_UNKNOWN,
+    PROFILE_UNKNOWN,
+    REFUSED,
+    build_preference_source,
+)
 from tests.factories import make_settings, problem_type, user_token
 from tests.integration.conftest import ACCOUNT, OTHER_ACCOUNT, FakeResolver, bearer, client_for
 
@@ -133,7 +138,7 @@ class TestWhenSettingsApiIsUnwell:
         assert "granted" not in problem["detail"]
         assert "spotify-api" not in problem["detail"]
 
-    async def test_an_outage_refuses_an_unnamed_profile_and_not_a_named_one(
+    async def test_an_outage_refuses_unknown_profile_or_explicit_preference(
         self, client: httpx.AsyncClient, chosen: TokenKeyedFake
     ) -> None:
         chosen.unavailable = True
@@ -147,7 +152,8 @@ class TestWhenSettingsApiIsUnwell:
 
         assert unnamed.status_code == 503
         assert unnamed.json()["detail"] == PROFILE_UNKNOWN
-        assert named.status_code == 200
+        assert named.status_code == 503
+        assert named.json()["detail"] == EXPLICIT_UNKNOWN
 
 
 class TestANamedMarketWins:

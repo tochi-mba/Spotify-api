@@ -52,6 +52,7 @@ class FakeResolver:
         self.batches: list[int] = []
         self.contexts: list[UserContext] = []
         self.gate: asyncio.Event | None = None
+        self.explicit: list[bool] = []
 
     async def resolve(
         self,
@@ -60,7 +61,9 @@ class FakeResolver:
         context: UserContext,
         market: str | None = None,
         default_market: str | None = None,
+        allow_explicit: bool = True,
     ) -> list[LookupResult]:
+        self.explicit.append(allow_explicit)
         if self.gate is not None:
             await self.gate.wait()
         if self.raises is not None:

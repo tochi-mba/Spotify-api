@@ -119,6 +119,7 @@ def test_every_status_the_service_has_always_returned_is_kept() -> None:
         "BatchTooLargeError": 422,
         "ConfirmationTimeoutError": 504,
         "CredentialUnavailableError": 502,
+        "ExplicitNotAllowedError": 403,
         "JobNotFoundError": 404,
         "KeyringUnavailableError": 503,
         "NoActiveDeviceError": 409,

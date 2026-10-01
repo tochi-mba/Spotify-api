@@ -200,6 +200,9 @@ async def get_recently_played(
         "When `uris` are given the confirmation checks that *that track* is playing, "
         "not merely that something is -- a device already playing something else would "
         "otherwise look like success.\n\n"
+        "A person who turned explicit tracks off is played none: a `uris` play that names "
+        "one is refused with `403` `explicit-not-allowed` and the tracks named, before "
+        "anything is sent to the player. A `context_uri` is not looked inside.\n\n"
         "`shuffle` and `repeat` are set once playback is confirmed, and then confirmed "
         "themselves. A new play that names neither takes the person's "
         "`spotify.shuffle_on_play` and `spotify.repeat_mode`; a resume leaves both alone."
@@ -218,8 +221,13 @@ async def play(
     """Start or resume playback."""
     shuffle = preferences.shuffle_for(payload)
     repeat = preferences.repeat_for(payload)
+    # Asked before anything is issued, and only of a play that names tracks: a resume
+    # needs no answer, and an outage must not stop one.
+    check_explicit = bool(payload.uris) and not preferences.explicit_allowed()
 
     async def issue() -> Predicate:
+        if check_explicit:
+            await player.refuse_explicit(payload.uris or (), context=context)
         started = await player.play(
             context=context,
             device_id=payload.device_id,
@@ -505,10 +513,17 @@ async def add_to_queue(
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
     """Queue an item."""
-    return await _command(
-        issue=lambda: player.add_to_queue(
+    check_explicit = not preferences.explicit_allowed()
+
+    async def issue() -> Predicate:
+        if check_explicit:
+            await player.refuse_explicit([payload.uri], context=context)
+        return await player.add_to_queue(
             context=context, uri=payload.uri, device_id=payload.device_id
-        ),
+        )
+
+    return await _command(
+        issue=issue,
         operation="player.queue",
         confirmer=confirmer,
         context=context,

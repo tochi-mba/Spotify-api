@@ -36,11 +36,11 @@ from spotify_api.errors import (
     SpotifyUnavailableError,
 )
 from spotify_api.logging import get_logger
-from spotify_api.spotify.mappers import first_track
+from spotify_api.spotify.mappers import first_clean_track, first_track
 from spotify_api.spotify.query import build_search_query
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from spotify_api.config import Settings
     from spotify_api.credentials.models import UserContext
@@ -56,6 +56,14 @@ _FORBIDDEN = 403
 _NOT_FOUND = 404
 _TOO_MANY_REQUESTS = 429
 _NO_CONTENT = 204
+
+#: How many matches to look through for one that is not marked explicit.
+CLEAN_CANDIDATES = 10
+
+#: Spotify's ceiling on ids in one `GET /tracks`.
+TRACKS_PER_CALL = 50
+
+TRACK_URI = "spotify:track:"
 
 #: Marker Spotify uses in 403 bodies when an account is not Premium.
 _PREMIUM_MARKERS = ("premium", "player command failed: premium required")
@@ -222,6 +230,44 @@ class SpotifyClient:
         self, item: LookupItem, *, market: str | None, context: UserContext
     ) -> dict[str, Any] | None:
         """Return the best-matching raw track for ``item``, or ``None``."""
+        return first_track(await self._search(item, market=market, context=context, limit=1))
+
+    async def search_clean_track(
+        self, item: LookupItem, *, market: str | None, context: UserContext
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """The best match not marked explicit, and whether explicit ones were passed over.
+
+        Asks for several, because the first match for a song is often its explicit
+        version and the clean one is a few places down.
+        """
+        payload = await self._search(item, market=market, context=context, limit=CLEAN_CANDIDATES)
+        return first_clean_track(payload)
+
+    async def explicit_among(self, uris: Sequence[str], *, context: UserContext) -> list[str]:
+        """Which of these track URIs Spotify marks explicit, in the order given.
+
+        Only tracks are asked about. An episode or anything else is passed over: there
+        is no one call that answers for every kind of URI.
+        """
+        ids = [uri.removeprefix(TRACK_URI) for uri in uris if uri.startswith(TRACK_URI)]
+        flagged: set[str] = set()
+        for start in range(0, len(ids), TRACKS_PER_CALL):
+            response = await self.request(
+                "GET",
+                "/tracks",
+                context=context,
+                params={"ids": ",".join(ids[start : start + TRACKS_PER_CALL])},
+            )
+            body = response.body if isinstance(response.body, dict) else {}
+            for track in body.get("tracks") or []:
+                if isinstance(track, dict) and track.get("explicit"):
+                    flagged.add(str(track.get("uri")))
+        return [uri for uri in uris if uri in flagged]
+
+    async def _search(
+        self, item: LookupItem, *, market: str | None, context: UserContext, limit: int
+    ) -> dict[str, Any]:
+        """One track search, as the JSON object Spotify answered with."""
         response = await self.request(
             "GET",
             "/search",
@@ -229,7 +275,7 @@ class SpotifyClient:
             params={
                 "q": build_search_query(item),
                 "type": "track",
-                "limit": 1,
+                "limit": limit,
                 "market": market,
             },
         )
@@ -237,7 +283,7 @@ class SpotifyClient:
         if not isinstance(payload, dict):
             message = "the Spotify search response was not a JSON object"
             raise SpotifyUnavailableError(message)
-        return first_track(payload)
+        return payload
 
     async def check_health(self) -> bool:
         """Whether the credential source is reachable. Never raises."""

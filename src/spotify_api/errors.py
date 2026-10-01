@@ -19,6 +19,7 @@ __all__ = [
     "BatchTooLargeError",
     "ConfirmationTimeoutError",
     "CredentialUnavailableError",
+    "ExplicitNotAllowedError",
     "JobNotFoundError",
     "KeyringUnavailableError",
     "NoActiveDeviceError",
@@ -136,6 +137,16 @@ class PremiumRequiredError(ServiceError):
     """
 
     error_type = "premium_required"
+
+
+class ExplicitNotAllowedError(ServiceError):
+    """A track marked explicit was named, and this person has turned those off.
+
+    Their own setting, not Spotify's: the fix is another track or a changed setting, so
+    the tracks that were refused are named.
+    """
+
+    error_type = "explicit_not_allowed"
 
 
 class NoActiveDeviceError(ServiceError):

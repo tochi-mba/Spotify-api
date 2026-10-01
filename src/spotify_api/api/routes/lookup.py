@@ -82,6 +82,8 @@ async def lookup(
             message, limit=preferences.max_batch_size, received=len(payload.items)
         )
 
+    allow_explicit = preferences.explicit_allowed()
+
     # Always bound: the context middleware wraps every route. The fallback keeps the type honest.
     request_id = get_request_id() or new_request_id()
 
@@ -90,6 +92,7 @@ async def lookup(
             payload.items,
             market=payload.market,
             default_market=preferences.default_market,
+            allow_explicit=allow_explicit,
             context=context,
         )
         return LookupResponse(request_id=request_id, results=results)
