@@ -117,6 +117,15 @@ this configuration, but `default_profile` refuses rather than guess, and fails o
 request that named no profile, with `503` `preferences-unavailable`. settings-api answering
 `401` or `403` fails the request too, because it means this service is misconfigured there.
 
+`allow_explicit` defaults to true. Turn it off to choose the first clean match among up to
+ten lookup candidates. If every candidate is explicit, the result is `not_found` with
+`withheld: "explicit"`. Play and queue requests naming track URIs check them before sending
+any player command; an explicit track returns `403` `explicit-not-allowed` with its URI.
+Album and playlist contexts, episodes, and resuming playback are not inspected. This setting
+does not filter the device's existing queue. When the preference is unavailable, lookups and
+requests naming tracks return `503` rather than guess; pause and resume still work with a
+known profile.
+
 ### Observability
 
 | Variable | Default | Notes |

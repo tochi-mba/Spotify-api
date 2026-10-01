@@ -13,7 +13,7 @@ from typing import Any
 
 from spotify_api.models.responses import Album, Artist, Track
 
-__all__ = ["first_track", "parse_release_year", "to_track"]
+__all__ = ["first_clean_track", "first_track", "parse_release_year", "to_track"]
 
 #: Spotify reports release dates with day, month or year precision.
 _YEAR_LENGTH = 4
@@ -78,3 +78,17 @@ def first_track(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     first: dict[str, Any] = items[0]
     return first
+
+
+def first_clean_track(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
+    """The best match that is not marked explicit, and whether explicit ones were passed over.
+
+    The second value is what tells "nothing matched" from "something matched and this person
+    has turned it off", which are different things to be told.
+    """
+    items = (payload.get("tracks") or {}).get("items") or []
+    for item in items:
+        if not item.get("explicit"):
+            clean: dict[str, Any] = item
+            return clean, False
+    return None, bool(items)

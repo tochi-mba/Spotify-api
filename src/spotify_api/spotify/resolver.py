@@ -23,7 +23,7 @@ from spotify_api.errors import (
     UserTokenRejectedError,
 )
 from spotify_api.logging import get_logger
-from spotify_api.models.responses import LookupResult, LookupStatus
+from spotify_api.models.responses import WITHHELD_EXPLICIT, LookupResult, LookupStatus
 from spotify_api.spotify.mappers import to_track
 
 if TYPE_CHECKING:
@@ -68,6 +68,7 @@ class SpotifyTrackResolver:
         context: UserContext,
         market: str | None = None,
         default_market: str | None = None,
+        allow_explicit: bool = True,
     ) -> list[LookupResult]:
         """Resolve every item, returning one result per item in input order.
 
@@ -77,6 +78,10 @@ class SpotifyTrackResolver:
         ``market`` is the request's own value. When it is omitted, ``default_market``
         is used -- the person's setting, passed in by the request path rather than
         read from process-wide configuration.
+
+        ``allow_explicit`` off resolves each item to its best match that is not marked
+        explicit. An item whose every match is explicit comes back ``not_found`` with
+        ``withheld`` saying so.
         """
         if not items:
             return []
@@ -86,7 +91,9 @@ class SpotifyTrackResolver:
 
         async def resolve_one(index: int, item: LookupItem) -> LookupResult:
             async with semaphore:
-                return await self._resolve_item(index, item, effective_market, context)
+                return await self._resolve_item(
+                    index, item, effective_market, context, allow_explicit=allow_explicit
+                )
 
         # gather preserves input order regardless of completion order, which is
         # what lets the caller line results up with what they submitted.
@@ -97,13 +104,24 @@ class SpotifyTrackResolver:
         return await self._client.check_health()
 
     async def _resolve_item(
-        self, index: int, item: LookupItem, market: str | None, context: UserContext
+        self,
+        index: int,
+        item: LookupItem,
+        market: str | None,
+        context: UserContext,
+        *,
+        allow_explicit: bool,
     ) -> LookupResult:
         """Resolve a single item, converting any failure into a result."""
+        raw: dict[str, Any] | None
+        passed_over = False
         try:
-            raw: dict[str, Any] | None = await self._client.search_track(
-                item, market=market, context=context
-            )
+            if allow_explicit:
+                raw = await self._client.search_track(item, market=market, context=context)
+            else:
+                raw, passed_over = await self._client.search_clean_track(
+                    item, market=market, context=context
+                )
         except _REQUEST_LEVEL_FAILURES:
             raise
         except ServiceError as exc:
@@ -120,5 +138,10 @@ class SpotifyTrackResolver:
             )
 
         if raw is None:
-            return LookupResult(index=index, query=item, status=LookupStatus.NOT_FOUND)
+            return LookupResult(
+                index=index,
+                query=item,
+                status=LookupStatus.NOT_FOUND,
+                withheld=WITHHELD_EXPLICIT if passed_over else None,
+            )
         return LookupResult(index=index, query=item, status=LookupStatus.FOUND, track=to_track(raw))

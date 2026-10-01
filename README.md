@@ -216,7 +216,8 @@ Switch on the last segment of `type`. `request_id` is on every problem, includin
 | `credential-unavailable` | 502 | You have not connected Spotify on that profile, or the grant stopped working. Reconnect it in keyring. |
 | `track-lookup-error` | 502 | A lookup failed in a way that could not be reported as one item's error. |
 | `keyring-unavailable` | 503 | keyring, or its published keys, could not be reached. |
-| `preferences-unavailable` | 503 | settings-api refused this service, or your default profile could not be read and you named none. |
+| `preferences-unavailable` | 503 | settings-api refused this service, or a required profile or explicit-content preference could not be read. |
+| `explicit-not-allowed` | 403 | A named track is explicit and your settings exclude it. No player command was sent. |
 | `spotify-auth-error` | 503 | Spotify refused the credential keyring provided. |
 | `spotify-rate-limit-error` | 503 | Rate limited past the retry budget. |
 | `spotify-unavailable-error` | 503 | Spotify unreachable or failing. |

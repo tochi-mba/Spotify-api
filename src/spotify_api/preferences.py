@@ -22,6 +22,10 @@ only the request that named no profile.
 play that does not say otherwise. Off, their defaults, leaves the device as the person
 last had it: a setting nobody touched must not undo a shuffle they chose in the app.
 
+**Explicit tracks are never guessed at.** ``allow_explicit`` refuses rather than falls back,
+and it fails only what needs it: a lookup, and a play or a queue that names tracks. A
+pause during an outage is still a pause.
+
 **A refusal is not an outage.** settings-api answering 401 or 403 means this
 service is misconfigured, and serving defaults would hide that behind behaviour
 that happens to work. The request fails instead.
@@ -58,6 +62,10 @@ PROFILE_UNKNOWN = (
 )
 REFUSED = "settings-api did not accept this service's request for your settings"
 NOT_GUESSED = "one of your settings could not be read from settings-api and must not be guessed"
+EXPLICIT_UNKNOWN = (
+    "whether you allow explicit tracks could not be read from settings-api, and it must not "
+    "be guessed; try again shortly"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +92,23 @@ class Preferences:
 
     repeat_mode: str = "off"
     """``track`` or ``context`` to repeat a new play that does not say; ``off`` changes nothing."""
+
+    allow_explicit: bool | None = True
+    """Whether tracks marked explicit may be offered and played.
+
+    ``None`` when settings-api could not be asked. It is not guessed: on is the default,
+    and landing on it would play explicit material to somebody who had turned it off.
+    """
+
+    def explicit_allowed(self) -> bool:
+        """Whether explicit tracks may be offered and played.
+
+        Raises:
+            PreferencesUnavailableError: the answer is unknown and must not be guessed.
+        """
+        if self.allow_explicit is None:
+            raise PreferencesUnavailableError(EXPLICIT_UNKNOWN)
+        return self.allow_explicit
 
     def shuffle_for(self, play: PlayRequest) -> bool | None:
         """What to set shuffle to for this play, or ``None`` to leave it alone."""
@@ -179,6 +204,7 @@ class SettingsApiPreferences:
                 max_batch_size=self._deployment.max_batch_size,
                 confirm_timeout_seconds=self._deployment.confirm_timeout_seconds,
                 default_profile=None,
+                allow_explicit=None,
             )
         except SettingsRejected as error:
             logger.warning("settings_rejected", namespace=NAMESPACE, status_code=error.status_code)
@@ -209,6 +235,7 @@ class SettingsApiPreferences:
             default_profile=self._default_profile(resolved),
             shuffle_on_play=resolved.get("shuffle_on_play", None) is True,
             repeat_mode=_repeat_mode(resolved),
+            allow_explicit=_allow_explicit(resolved),
         )
 
     def _market(self, resolved: ResolvedSettings) -> str | None:
@@ -297,6 +324,25 @@ def _repeat_mode(resolved: ResolvedSettings) -> str:
     return value if isinstance(value, str) and value in REPEATING else "off"
 
 
+def _allow_explicit(resolved: ResolvedSettings) -> bool | None:
+    """``spotify.allow_explicit``: the person's answer, or ``None`` when it is not known.
+
+    A settings-api that has no such key yet allows them, which is what this service did
+    before the setting existed. A key that cannot be read, or holds something that is
+    not a yes or a no, is not known.
+    """
+    if "allow_explicit" not in resolved:
+        return True
+    try:
+        value = resolved.get("allow_explicit", None)
+    except SettingsRefused:
+        return None
+    if isinstance(value, bool):
+        return value
+    logger.warning("setting_unusable", namespace=NAMESPACE, key="allow_explicit")
+    return None
+
+
 def _positive_seconds(resolved: ResolvedSettings, key: str) -> float | None:
     """``key`` as a positive number of seconds.
 
@@ -312,6 +358,7 @@ def _positive_seconds(resolved: ResolvedSettings, key: str) -> float | None:
 
 
 __all__ = [
+    "EXPLICIT_UNKNOWN",
     "NOT_GUESSED",
     "PROFILE_UNKNOWN",
     "REFUSED",

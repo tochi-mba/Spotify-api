@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from spotify_api.errors import ExplicitNotAllowedError
 from spotify_api.jobs.confirm import (
     all_of,
     always_confirmed,
@@ -25,6 +26,8 @@ from spotify_api.jobs.confirm import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from spotify_api.credentials.models import UserContext
     from spotify_api.jobs.confirm import Predicate
     from spotify_api.spotify.client import SpotifyClient
@@ -90,6 +93,20 @@ class PlayerResource:
             params={"limit": limit, "after": after, "before": before},
         )
         return _as_dict(response.body)
+
+    async def refuse_explicit(self, uris: Sequence[str], *, context: UserContext) -> None:
+        """Refuse to go on when any of these tracks is marked explicit.
+
+        Raises:
+            ExplicitNotAllowedError: at least one is, and they are named.
+        """
+        flagged = await self._client.explicit_among(uris, context=context)
+        if flagged:
+            message = (
+                f"{len(flagged)} of the tracks named {'is' if len(flagged) == 1 else 'are'} "
+                "marked explicit, and your settings leave those out; nothing was played"
+            )
+            raise ExplicitNotAllowedError(message, explicit=flagged)
 
     # -- mutations ----------------------------------------------------------
 

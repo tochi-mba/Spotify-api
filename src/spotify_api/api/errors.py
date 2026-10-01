@@ -32,6 +32,7 @@ from spotify_api.errors import (
     BatchTooLargeError,
     ConfirmationTimeoutError,
     CredentialUnavailableError,
+    ExplicitNotAllowedError,
     JobNotFoundError,
     KeyringUnavailableError,
     NoActiveDeviceError,
@@ -87,6 +88,7 @@ _DOMAIN_STATUS: dict[type[ServiceError], int] = {
     UserTokenRejectedError: status.HTTP_401_UNAUTHORIZED,
     # Named apart from every other refusal: "upgrade the account" is advice a caller can act on.
     PremiumRequiredError: status.HTTP_403_FORBIDDEN,
+    ExplicitNotAllowedError: status.HTTP_403_FORBIDDEN,
     # Unknown, expired and another account's are one answer, so the status confirms nothing.
     JobNotFoundError: status.HTTP_404_NOT_FOUND,
     NoActiveDeviceError: status.HTTP_409_CONFLICT,

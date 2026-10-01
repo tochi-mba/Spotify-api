@@ -89,6 +89,10 @@ class Track(BaseModel):
     uri: str = Field(description="Spotify URI, e.g. spotify:track:...")
 
 
+#: ``LookupResult.withheld`` when every match was explicit and the person turned those off.
+WITHHELD_EXPLICIT = "explicit"
+
+
 class LookupResult(BaseModel):
     """The outcome for one submitted item."""
 
@@ -98,6 +102,13 @@ class LookupResult(BaseModel):
     track: Track | None = Field(default=None, description="Populated only when status is found.")
     error: str | None = Field(
         default=None, description="Human-readable reason, populated only when status is error."
+    )
+    withheld: str | None = Field(
+        default=None,
+        description=(
+            "Why nothing is offered although something matched. `explicit` when every match "
+            "is marked explicit and this person has turned those off."
+        ),
     )
 
 

@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Apply `spotify.allow_explicit` to track lookup, play and queue. Clean lookup candidates
+  are preferred when disabled; explicit named tracks are refused before player commands.
+  Requests requiring an unavailable explicit-content preference fail rather than guess.
+
 ### Security
 
 - Every request's keyring user token is now verified locally against keyring's published
