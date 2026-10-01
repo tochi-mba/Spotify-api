@@ -1,5 +1,7 @@
 # Spotify Lookup API
 
+A REX Technologies product. Site: <https://tochi-mba.github.io/Spotify-api/>
+
 An HTTP service that resolves batches of loosely-specified tracks against the
 [Spotify Web API](https://developer.spotify.com/documentation/web-api), and controls
 playback with every command confirmed on the device.

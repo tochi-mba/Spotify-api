@@ -66,6 +66,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A GitHub Pages site at <https://tochi-mba.github.io/Spotify-api/>, in the REX ink/signal style: what Spotify-api is,
+  its API, how to run it and what it will not do. `site/` is plain static HTML;
+  `.github/workflows/pages.yml` publishes it after `scripts/check_site.py` has checked every
+  page for a broken anchor, a missing asset, an image without alt text or draft text.
+- The repository is attributed to REX Technologies: the LICENSE copyright holder, the package
+  author and the README.
 - The Player API. Reads: `GET /v1/player` (playback state), `/v1/player/devices`,
   `/v1/player/currently-playing`, `/v1/player/queue` and `/v1/player/recently-played`.
   Commands: `POST /v1/player/play`, `pause`, `next`, `previous`, `seek`, `volume`,

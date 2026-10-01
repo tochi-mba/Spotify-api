@@ -5,7 +5,7 @@ description = "A production-grade HTTP service for batch-resolving track metadat
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "tochi-mba" }]
+authors = [{ name = "REX Technologies" }]
 keywords = ["spotify", "fastapi", "music", "metadata"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -155,6 +155,8 @@ ignore = [
 # PERF were adopted with zero findings.
 
 [tool.ruff.lint.per-file-ignores]
+# The site checker is a command-line gate: printing its findings is its job.
+"scripts/check_site.py" = ["T201"]
 # FastAPI resolves route signatures at runtime to build the OpenAPI schema and
 # the dependency graph, so these imports cannot move into TYPE_CHECKING blocks.
 "src/spotify_api/api/**" = ["TC001", "TC002", "TC003"]
@@ -203,7 +205,7 @@ known-first-party = ["spotify_api"]
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "tests"]
-mypy_path = "src"
+mypy_path = ["src", "scripts"]
 strict = true
 warn_unreachable = true
 warn_unused_ignores = true
