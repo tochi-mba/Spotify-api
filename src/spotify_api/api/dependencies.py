@@ -48,7 +48,6 @@ __all__ = [
     "PlayerDep",
     "PreferencesDep",
     "ResolverDep",
-    "SettingsDep",
     "UserContextDep",
     "bearer_scheme",
     "get_confirmer",
@@ -248,5 +247,4 @@ PlayerDep = Annotated["PlayerResource", Depends(get_player)]
 JobStoreDep = Annotated["JobStore", Depends(get_job_store)]
 PreferencesDep = Annotated[Preferences, Depends(get_preferences)]
 ResolverDep = Annotated["TrackResolver", Depends(get_resolver)]
-SettingsDep = Annotated["Settings", Depends(get_settings_dependency)]
 UserContextDep = Annotated[UserContext, Depends(get_user_context)]

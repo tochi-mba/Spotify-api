@@ -76,11 +76,6 @@ class SpotifyResponse:
     status_code: int
     body: Any | None = None
 
-    @property
-    def is_empty(self) -> bool:
-        """Whether Spotify answered without a body."""
-        return self.body is None
-
 
 def _encode(value: Any) -> str:  # noqa: ANN401
     """Render a query value the way Spotify expects it.

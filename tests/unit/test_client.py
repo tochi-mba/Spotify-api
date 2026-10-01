@@ -136,7 +136,6 @@ async def test_it_returns_the_status_and_decoded_body(build_client: Any) -> None
     assert isinstance(response, SpotifyResponse)
     assert response.status_code == 200
     assert response.body == {"id": "abc"}
-    assert response.is_empty is False
 
 
 async def test_a_204_is_a_successful_empty_response(build_client: Any) -> None:
@@ -145,13 +144,12 @@ async def test_a_204_is_a_successful_empty_response(build_client: Any) -> None:
     response = await client.request("PUT", "/me/player/play", context=CONTEXT)
 
     assert response.status_code == 204
-    assert response.is_empty is True
     assert response.body is None
 
 
 async def test_a_200_with_an_empty_body_is_tolerated(build_client: Any) -> None:
     client = build_client(responder(httpx.Response(200, content=b"")))
-    assert (await client.request("PUT", "/me/player/pause", context=CONTEXT)).is_empty
+    assert (await client.request("PUT", "/me/player/pause", context=CONTEXT)).body is None
 
 
 async def test_a_json_body_is_sent_when_given(

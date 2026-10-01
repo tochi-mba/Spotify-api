@@ -41,11 +41,6 @@ class JobRunner:
         self.store = store
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
-    @property
-    def in_flight(self) -> int:
-        """How many jobs are currently running."""
-        return len(self._tasks)
-
     async def submit(
         self, *, operation: str, account_id: str, work: Callable[[], Awaitable[Any]]
     ) -> Job:
