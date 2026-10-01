@@ -172,7 +172,7 @@ tests/
    `responses` map for every non-200 it can produce.
 3. Include it in `api/router.py` — under `api_router` unless it is a probe.
 4. Depend on the aliases in `api/dependencies.py` (`ResolverDep`, `PlayerDep`,
-   `SettingsDep`, `UserContextDep` and the rest). Never construct a client in a
+   `PreferencesDep`, `UserContextDep` and the rest). Never construct a client in a
    route or import one.
 
 ### Add a Spotify endpoint

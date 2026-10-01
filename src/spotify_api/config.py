@@ -253,11 +253,6 @@ class Settings(BaseSettings):
             return None
         return self.settings_api_base_url, self.settings_api_token
 
-    @property
-    def is_production(self) -> bool:
-        """Whether the service is running in its production environment."""
-        return self.environment == "production"
-
 
 class UnknownSettingError(ValueError):
     """A variable is set that no setting corresponds to, or that has since been renamed."""

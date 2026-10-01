@@ -330,7 +330,7 @@ async def test_finished_tasks_are_not_retained(runner: JobRunner) -> None:
         await runner.submit(operation="op", account_id=ALICE, work=work)
     await settle()
 
-    assert runner.in_flight == 0
+    assert runner._tasks == {}
 
 
 async def test_recording_an_attempt_against_an_unknown_job_is_harmless(

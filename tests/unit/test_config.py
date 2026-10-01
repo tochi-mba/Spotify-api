@@ -139,11 +139,6 @@ def test_the_service_token_never_appears_in_repr_or_dump() -> None:
     assert "**********" in repr(settings)
 
 
-def test_is_production_reflects_the_environment() -> None:
-    assert make_settings(environment="production").is_production is True
-    assert make_settings(environment="development").is_production is False
-
-
 def test_an_invented_setting_is_refused_by_the_model_too() -> None:
     with pytest.raises(ValidationError, match="Extra inputs"):
         make_settings(enable_everything=True)
