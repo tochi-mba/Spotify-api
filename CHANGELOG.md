@@ -66,6 +66,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A new play takes the person's shuffle and repeat.** `spotify.shuffle_on_play` and
+  `spotify.repeat_mode` could be set and read back, and changed nothing. A play that names
+  what to play now sets them once playback is confirmed, and confirms them too. `POST
+  /v1/player/play` takes `shuffle` and `repeat` for a request that wants to say, and a
+  request that says wins. The settings only ever turn a mode on: left off they send Spotify
+  nothing, so a shuffle chosen in the app is not undone, and a resume never applies them.
 - A GitHub Pages site at <https://tochi-mba.github.io/Spotify-api/>, in the REX ink/signal style: what Spotify-api is,
   its API, how to run it and what it will not do. `site/` is plain static HTML;
   `.github/workflows/pages.yml` publishes it after `scripts/check_site.py` has checked every

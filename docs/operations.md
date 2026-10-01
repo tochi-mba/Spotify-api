@@ -100,7 +100,8 @@ Two settings must agree with keyring or nothing works, and both fail closed:
 
 Unset, everybody gets the configuration on this page, which is how a deployment ships. Set
 both variables and each request reads that person's `spotify` settings: their default
-market, lookup batch cap, confirm timeout, and which profile they mean when they name none.
+market, lookup batch cap, confirm timeout, whether a new play is shuffled or repeated, and
+which profile they mean when they name none.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
@@ -109,6 +110,8 @@ market, lookup batch cap, confirm timeout, and which profile they mean when they
 
 **The pair must be set together**; either one alone is a startup error. A person may lower
 `max_batch_size` and `confirm_timeout_seconds`, never raise them above this configuration.
+`shuffle_on_play` and `repeat_mode` apply to a play that names what to play and does not say
+otherwise; off, their defaults, sends Spotify nothing and leaves the device as it was.
 Nothing is fetched at startup. During a settings-api outage the other settings fall back to
 this configuration, but `default_profile` refuses rather than guess, and fails only a
 request that named no profile, with `503` `preferences-unavailable`. settings-api answering

@@ -25,6 +25,7 @@ from spotify_api.api.dependencies import (
     PreferencesDep,
     UserContextDep,
 )
+from spotify_api.jobs.confirm import all_of
 from spotify_api.models.player import (
     PlayRequest,
     QueueRequest,
@@ -198,7 +199,10 @@ async def get_recently_played(
         "neither to resume whatever was loaded.\n\n"
         "When `uris` are given the confirmation checks that *that track* is playing, "
         "not merely that something is -- a device already playing something else would "
-        "otherwise look like success."
+        "otherwise look like success.\n\n"
+        "`shuffle` and `repeat` are set once playback is confirmed, and then confirmed "
+        "themselves. A new play that names neither takes the person's "
+        "`spotify.shuffle_on_play` and `spotify.repeat_mode`; a resume leaves both alone."
     ),
     responses=_COMMAND_RESPONSES,
 )
@@ -212,15 +216,32 @@ async def play(
     run_async: AsyncFlag = False,
 ) -> PlaybackState | JSONResponse:
     """Start or resume playback."""
-    return await _command(
-        issue=lambda: player.play(
+    shuffle = preferences.shuffle_for(payload)
+    repeat = preferences.repeat_for(payload)
+
+    async def issue() -> Predicate:
+        started = await player.play(
             context=context,
             device_id=payload.device_id,
             context_uri=payload.context_uri,
             uris=payload.uris,
             offset=payload.offset,
             position_ms=payload.position_ms,
-        ),
+        )
+        if shuffle is None and repeat is None:
+            return started
+        # Shuffle and repeat are set on a device that is playing: sent with the play
+        # itself they can reach Spotify before the device is active and be refused.
+        await confirmer.confirm(
+            started, context=context, timeout_seconds=preferences.confirm_timeout_seconds
+        )
+        modes = await player.set_modes(
+            context=context, shuffle=shuffle, repeat=repeat, device_id=payload.device_id
+        )
+        return all_of(started, modes)
+
+    return await _command(
+        issue=issue,
         operation="player.play",
         confirmer=confirmer,
         context=context,

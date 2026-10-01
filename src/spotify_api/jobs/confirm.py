@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 __all__ = [
     "PlaybackConfirmer",
     "Predicate",
+    "all_of",
     "always_confirmed",
     "device_is",
     "is_paused",
@@ -69,6 +70,11 @@ def always_confirmed() -> Predicate:
     for it, so polling would manufacture failures rather than detect them.
     """
     return lambda _player: True
+
+
+def all_of(*predicates: Predicate) -> Predicate:
+    """Every one of them holds -- for a command that changed more than one thing."""
+    return lambda player: all(predicate(player) for predicate in predicates)
 
 
 def playing_uri(uri: str) -> Predicate:
