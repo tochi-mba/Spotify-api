@@ -186,9 +186,9 @@ async def get_user_context(
 
     set_account_id(verified.account_id)
     source = get_preference_source(request)
-    preferences = await source.for_token(token)
-    request.state.preferences = preferences
     requested_profile = (x_keyring_profile or "").strip() or None
+    preferences = await source.for_token(token, profile=requested_profile)
+    request.state.preferences = preferences
     profile = preferences.profile(requested_profile)
     return UserContext(account_id=verified.account_id, user_token=SecretStr(token), profile=profile)
 

@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A person's settings are read for the profile the request runs as.** Every `spotify`
+  setting is profile-scoped, and settings-api returns a profile's values only to a request
+  that names the profile. This service named none, so every choice a person made arrived
+  as the catalogue default: market, batch size, confirm timeout, shuffle, repeat, and
+  `allow_explicit`, so explicit tracks were played to someone who had turned them off. The
+  request's `X-Keyring-Profile` is now named, or with none the person's
+  `common.default_profile`, read first. settings-client moves to 0.4.0, whose test fake
+  keeps profiles apart; the old one ignored them, which is why no test caught this.
 - Apply `spotify.allow_explicit` to track lookup, play and queue. Clean lookup candidates
   are preferred when disabled; explicit named tracks are refused before player commands.
   Requests requiring an unavailable explicit-content preference fail rather than guess.
