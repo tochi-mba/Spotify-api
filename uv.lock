@@ -1141,8 +1141,8 @@ wheels = [
 
 [[package]]
 name = "settings-client"
-version = "0.4.0"
-source = { git = "https://github.com/tochi-mba/Settings-api?subdirectory=clients%2Fpython&tag=settings-client-v0.4.0#ea22e347a7ec1f498b7fc703204e112f71aea4e1" }
+version = "0.4.1"
+source = { git = "https://github.com/tochi-mba/Settings-api?subdirectory=clients%2Fpython&tag=settings-client-v0.4.1#4234c872e989c52a8fb2ad037be98c21218c17bb" }
 dependencies = [
     { name = "httpx" },
 ]
@@ -1180,7 +1180,7 @@ requires-dist = [
     { name = "keyring-client", git = "https://github.com/tochi-mba/Keyring-api?subdirectory=clients%2Fpython&tag=keyring-client-v0.1.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
-    { name = "settings-client", git = "https://github.com/tochi-mba/Settings-api?subdirectory=clients%2Fpython&tag=settings-client-v0.4.0" },
+    { name = "settings-client", git = "https://github.com/tochi-mba/Settings-api?subdirectory=clients%2Fpython&tag=settings-client-v0.4.1" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
