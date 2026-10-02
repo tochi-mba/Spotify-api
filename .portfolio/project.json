@@ -1,0 +1,19 @@
+{
+  "$schema": "https://tochi-mba.github.io/schema/project.schema.json",
+  "slug": "spotify-lookup",
+  "name": "spotify lookup",
+  "tagline": "Resolve batches of loosely specified tracks against Spotify, and control playback with every command confirmed on the device.",
+  "description": "Submit an array of { name, artist?, album?, year? } and get back one fully populated result per item, in order, each with its own status. It holds no Spotify credential of its own: every request carries the caller's keyring token and keyring hands over the headers for that person's own connection. 100% coverage.",
+  "highlights": [
+    "Batch, order-preserving resolution with per-item status",
+    "Playback commands confirmed on the device",
+    "No credential of its own"
+  ],
+  "stack": ["Python 3.12", "FastAPI", "Spotify Web API"],
+  "category": "service",
+  "family": "lucy",
+  "role": "music",
+  "status": "active",
+  "order": 160,
+  "display": true
+}
