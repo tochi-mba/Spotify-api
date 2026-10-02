@@ -139,11 +139,12 @@ class Preferences:
 class PreferenceSource(Protocol):
     """Where a request's preferences come from."""
 
-    async def for_token(self, user_token: str | None, /) -> Preferences:
-        """The preferences of whoever ``user_token`` belongs to.
+    async def for_token(self, user_token: str | None, /, profile: str | None = None) -> Preferences:
+        """The preferences of whoever ``user_token`` belongs to, in ``profile``.
 
         ``None`` is no caller at all -- a path that does not authenticate -- and gets the
-        configuration.
+        configuration. ``profile`` is the one the request named; with none, the person's
+        default profile is used.
 
         Raises:
             PreferencesUnavailableError: settings-api refused this service, or cannot
@@ -173,8 +174,11 @@ class DeploymentPreferences:
         """Bind the configuration everybody gets."""
         self._preferences = deployment_preferences(settings)
 
-    async def for_token(self, _user_token: str | None, /) -> Preferences:
-        """Return the configuration; the token is ignored."""
+    async def for_token(
+        self, _user_token: str | None, /, profile: str | None = None
+    ) -> Preferences:
+        """Return the configuration; the token and the profile are ignored."""
+        del profile
         return self._preferences
 
     async def aclose(self) -> None:
@@ -190,13 +194,26 @@ class SettingsApiPreferences:
         self._settings = settings
         self._deployment = deployment_preferences(settings)
 
-    async def for_token(self, user_token: str | None, /) -> Preferences:
-        """Read this person's ``spotify`` settings, or the configuration if there is none."""
+    async def for_token(self, user_token: str | None, /, profile: str | None = None) -> Preferences:
+        """Read this person's ``spotify`` settings for a profile, or the configuration.
+
+        Every ``spotify`` setting is profile-scoped, and settings-api returns a profile's
+        values only to a resolve that names it. So the profile is always named: the one the
+        request gave, or, when it gave none, the person's ``common.default_profile``, which
+        is account-wide and comes back from a first resolve without one. A default that
+        cannot be read leaves that first answer in place; the request refuses later, if it
+        needs a profile at all.
+        """
         if user_token is None:
             return self._deployment
 
         try:
-            resolved = await self._client.resolve(NAMESPACE, user_token=user_token)
+            resolved = await self._client.resolve(NAMESPACE, user_token=user_token, profile=profile)
+            chosen = profile or self._default_profile(resolved)
+            if profile is None and chosen is not None:
+                resolved = await self._client.resolve(
+                    NAMESPACE, user_token=user_token, profile=chosen
+                )
         except SettingsUnavailable:
             logger.warning("settings_unavailable", namespace=NAMESPACE)
             return Preferences(

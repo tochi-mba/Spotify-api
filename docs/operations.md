@@ -103,6 +103,10 @@ both variables and each request reads that person's `spotify` settings: their de
 market, lookup batch cap, confirm timeout, whether a new play is shuffled or repeated, and
 which profile they mean when they name none.
 
+Every `spotify` setting is per keyring profile. Each request is resolved for the profile
+it runs as: the one in `X-Keyring-Profile`, or, when it names none, the person's
+`common.default_profile` (one extra lookup, cached like the rest).
+
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `SPOTIFY_API_SETTINGS_API_BASE_URL` | unset | Where settings-api is. Blank or unset is off. |
